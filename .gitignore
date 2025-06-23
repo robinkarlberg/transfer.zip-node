@@ -1,0 +1,6 @@
+.env
+node_modules
+
+/_local_dev_keys/
+/keys/
+/uploads
