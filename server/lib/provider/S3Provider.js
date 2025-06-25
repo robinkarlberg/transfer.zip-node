@@ -1,0 +1,116 @@
+import archiver from "archiver"
+import { getObject, headBucket, listAllObjects, listBuckets, signDownload } from "../s3.js";
+import { BaseProvider } from "./BaseProvider.js";
+import { Upload } from "@aws-sdk/lib-storage";
+import { conf } from "../config.js";
+import { S3Client } from "@aws-sdk/client-s3";
+import { S3Store } from "@tus/s3-store";
+import validateFileId, { parseMeta } from "./providerUtils.js";
+import { PassThrough } from "stream";
+
+export class S3Provider extends BaseProvider {
+  constructor(config) {
+    super(config)
+    this.client = new S3Client(this.config.s3)
+    // this.datastore here
+    // new S3Client({
+    //   endpoint
+    // })
+    this.datastore = new S3Store({
+      s3ClientConfig: {
+        endpoint: this.config.s3.endpoint,
+        region: this.config.s3.region,
+        credentials: this.config.s3.credentials,
+        bucket: this.config.bucket,
+      },
+      partSize: conf.partSizeMB * 1024 ** 2,
+      queueSize: this.config.parallelWrites,
+    })
+
+    // this.client.config.credentials().then(console.log)
+    // listBuckets(this.client).then(console.log)
+    // listAllObjects(this.client, "kb-dev-0", "/").then(console.log)
+    // console.log(this.config.s3)
+    // console.log(this.client)
+  }
+
+  getRootKey() {
+    return ``
+  }
+
+  async hasBundle(transferId) {
+    try {
+      await headBucket(this.client, this.config.bucket, this.getBundleKey(transferId))
+      return true
+    } catch (err) {
+      if (err.name === 'NotFound' || err.$metadata?.httpStatusCode === 404) {
+        return false
+      }
+      throw err
+    }
+  }
+
+  async listFiles(transferId) {
+    super.listFiles()
+
+    const prefix = await this.getTransferFilesBaseKey(transferId)
+
+    const objects = await listAllObjects(this.client, this.config.bucket, prefix)
+
+    return objects.map(object => ({ id: object.key, size: object.size }))
+  }
+
+  async createZipBundle(transferId, filesList) {
+    const { stream, done: zipDone } = await this.prepareZipBundleStream(transferId, filesList)
+
+    const uploader = new Upload({
+      client: this.client,
+      params: { Bucket: this.config.bucket, Key: this.getBundleKey(transferId), Body: stream },
+      queueSize: this.config.parallelWrites,
+      partSize: conf.partSizeMB * 1024 ** 2,
+      leavePartsOnError: false
+    })
+
+    const [{ bytes }, s3Result] = await Promise.all([
+      zipDone,                    // resolves on 'finish'
+      uploader.done(),            // resolves on CompleteMultipartUpload
+    ]);
+
+    return { ok: true, bytes }
+  }
+
+  async prepareBundleSaved(transferId, fileName) {
+    const key = this.getBundleKey(transferId)
+    const url = await signDownload({
+      client: this.client,
+      bucket: this.config.bucket,
+      key,
+      fileName
+    })
+    return { url }
+  }
+
+  async prepareZipBundleStream(transferId, filesList) {
+    const passThrough = new PassThrough();
+    const archive = archiver('zip', { forceZip64: true, store: true }).on('error', err => { throw err })
+
+    for (const f of filesList) {
+      const objectKey = await this.getTransferFileKey(transferId, f.id)
+      const { Body } = await getObject(this.client, this.config.bucket, objectKey)
+
+      archive.append(Body, { name: f.relativePath, size: f.size })
+    }
+
+    const done = new Promise((resolve, reject) => {
+      archive
+        .on('finish', () => resolve({ bytes: archive.pointer() }))
+        .on('error', reject)
+    })
+
+    archive.pipe(passThrough)
+
+    archive.finalize()      // kick off "compression"
+
+    return { stream: passThrough, done }
+  }
+}

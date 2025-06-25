@@ -1,0 +1,37 @@
+{
+  "active": "hetzner",
+  "providers": {
+    "r2": {
+      "s3": {
+        "region":"auto",
+        "endpoint": "https://<CLOUDFLARE_ACCOUNT_ID>.r2.cloudflarestorage.com",
+        "credentials": {
+          "accessKeyId": "",
+          "secretAccessKey": ""
+        },
+        "forcePathStyle": true,
+        "requestChecksumCalculation": "WHEN_REQUIRED",
+        "responseChecksumValidation": "WHEN_REQUIRED"
+      },
+      "bucket": "<BUCKET_NAME>",
+      "parallelWrites": 1
+    },
+    "hetzner": {
+      "s3": {
+        "region":"EU",
+        "endpoint": "https://<LOCATION>.your-objectstorage.com",
+        "credentials": {
+          "accessKey": "",
+          "secretKey": ""
+        }
+      },
+      "bucket": "<BUCKET_NAME>",
+      "parallelWrites": 4
+    },
+    "local": {
+      "root": "./uploads"
+    }
+  },
+  "partSizeMB": 64,
+  "lockTTL": 900000
+}

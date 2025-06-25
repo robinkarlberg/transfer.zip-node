@@ -1,22 +1,24 @@
 services:
   worker:
-    build: worker
+    build: server
     volumes:
       - ./keys:/keys
     ports:
-      - 127.0.0.1:${WORKER_FORWARD_PORT:3050}:3050
+      - 127.0.0.1:${SERVER_FORWARD_PORT:-3050}:3050
     env_file:
-      - worker/.env
+      - server/.env
     
-  # TODO: Implement zip queue instead of zipping on demand!
-  # redis:
-  #   image: redis:8.0-alpine
-  #   command: >
-  #     --appendonly no                # locks vanish on restart
-  #     --save ""                      # disable RDB snapshots
-  #     --requirepass "${REDIS_PASSWORD}"
-  #     --maxmemory 128mb              # plenty for a few hundred locks
-  #     --maxmemory-policy allkeys-lru
-  #   restart: unless-stopped
-  #   ports:
-  #     - "127.0.0.1:6379:6379"
+  redis:
+    image: redis:8.0-alpine
+    command: >
+      --appendonly yes
+      --aof-use-rdb-preamble yes
+      --maxmemory 256mb
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+
+volumes:
+  redis-data: {}
