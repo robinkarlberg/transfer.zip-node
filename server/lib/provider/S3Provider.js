@@ -1,5 +1,5 @@
 import archiver from "archiver"
-import { getObject, headBucket, listAllObjects, listBuckets, signDownload } from "../s3.js";
+import { deleteKeyRecurse, getObject, headBucket, listAllObjects, listBuckets, signDownload } from "../s3.js";
 import { BaseProvider } from "./BaseProvider.js";
 import { Upload } from "@aws-sdk/lib-storage";
 import { conf } from "../config.js";
@@ -7,6 +7,8 @@ import { S3Client } from "@aws-sdk/client-s3";
 import { S3Store } from "@tus/s3-store";
 import validateFileId, { parseMeta } from "./providerUtils.js";
 import { PassThrough } from "stream";
+import { finished, pipeline } from "stream/promises";
+import Bottleneck from "bottleneck";
 
 export class S3Provider extends BaseProvider {
   constructor(config) {
@@ -61,22 +63,21 @@ export class S3Provider extends BaseProvider {
   }
 
   async createZipBundle(transferId, filesList) {
-    const { stream, done: zipDone } = await this.prepareZipBundleStream(transferId, filesList)
+    const passThrough = new PassThrough()
 
     const uploader = new Upload({
       client: this.client,
-      params: { Bucket: this.config.bucket, Key: this.getBundleKey(transferId), Body: stream },
+      params: { Bucket: this.config.bucket, Key: this.getBundleKey(transferId), Body: passThrough },
       queueSize: this.config.parallelWrites,
       partSize: conf.partSizeMB * 1024 ** 2,
       leavePartsOnError: false
     })
 
-    const [{ bytes }, s3Result] = await Promise.all([
-      zipDone,                    // resolves on 'finish'
-      uploader.done(),            // resolves on CompleteMultipartUpload
-    ]);
+    await this.prepareZipBundleArchive(transferId, filesList, passThrough)
 
-    return { ok: true, bytes }
+    await uploader.done()
+
+    return { ok: true }
   }
 
   async prepareBundleSaved(transferId, fileName) {
@@ -90,27 +91,42 @@ export class S3Provider extends BaseProvider {
     return { url }
   }
 
-  async prepareZipBundleStream(transferId, filesList) {
-    const passThrough = new PassThrough();
-    const archive = archiver('zip', { forceZip64: true, store: true }).on('error', err => { throw err })
+  async prepareZipBundleArchive(transferId, files, stream) {
+    const STREAMS = 4
+    const BYTE_WIN = 10 * 1024 * 1024       // 10 MB
 
-    for (const f of filesList) {
-      const objectKey = await this.getTransferFileKey(transferId, f.id)
-      const { Body } = await getObject(this.client, this.config.bucket, objectKey)
+    const streamLimiter = new Bottleneck({ maxConcurrent: STREAMS })
+    const byteLimiter = new Bottleneck({ maxConcurrent: BYTE_WIN })
+    let aborted = false
+    const archive = archiver('zip', { forceZip64: true, store: true })
+      .on('error', err => aborted ? console.warn('client aborted') : console.error(err))
 
-      archive.append(Body, { name: f.relativePath, size: f.size })
-    }
+    pipeline(archive, stream)
+    stream.once('close', () => { aborted = true })
 
-    const done = new Promise((resolve, reject) => {
-      archive
-        .on('finish', () => resolve({ bytes: archive.pointer() }))
-        .on('error', reject)
-    })
+    const tasks = files.map(f =>
+      streamLimiter.schedule(() =>
+        byteLimiter.schedule({ weight: clampWeight(f.size, BYTE_WIN) }, async () => {
+          const key = await this.getTransferFileKey(transferId, f.id)
+          const { Body } = await getObject(this.client, this.config.bucket, key)
 
-    archive.pipe(passThrough)
+          archive.append(Body, { name: f.relativePath, size: f.size })
+          await finished(Body)
+        })
+      ).finally(() =>               // give the tokens back
+        byteLimiter.incrementReservoir(clampWeight(f.size, BYTE_WIN))
+      )
+    )
 
-    archive.finalize()      // kick off "compression"
-
-    return { stream: passThrough, done }
+    await Promise.all(tasks)
+    archive.finalize()
   }
+
+  async delete(transferId) {
+    return deleteKeyRecurse(this.client, this.config.bucket, this.getTransferBaseKey(transferId))
+  }
+}
+
+function clampWeight(size, WINDOW) {
+  return Math.min(size, WINDOW)
 }

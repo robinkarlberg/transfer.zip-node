@@ -8,6 +8,8 @@ import {
   HeadObjectCommand,
   ListObjectsV2Command,
   ListBucketsCommand,
+  DeleteObjectsCommand,
+  DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -109,4 +111,46 @@ export async function getObject(client, bucket, key) {
 
 export async function listBuckets(client) {
   return client.send(new ListBucketsCommand());
+}
+
+export async function deleteKeyRecurse(client, bucket, key) {
+  const objects = await listAllObjects(client, bucket, key)
+  const keys = objects.map(obj => ({ Key: obj.key }))
+  if (keys.length === 0) return
+
+  // S3 allows up to 1000 keys per delete
+  for (let i = 0; i < keys.length; i += 1000) {
+    await client.send(
+      new DeleteObjectsCommand({
+        Bucket: bucket,
+        Delete: {
+          Objects: keys.slice(i, i + 1000),
+          Quiet: true
+        }
+      })
+    )
+  }
+
+  // Also delete the prefix `key` if it is itself an object
+  if (!objects.some(obj => obj.key === key)) {
+    try {
+      await client.send(
+        new DeleteObjectCommand({
+          Bucket: bucket,
+          Key: key
+        })
+      )
+    } catch (e) {
+      // ignore if not found
+    }
+  }
+}
+
+export async function deleteKey(client, bucket, key) {
+  return client.send(
+    new DeleteObjectCommand({
+      Bucket: bucket,
+      Key: key
+    })
+  )
 }

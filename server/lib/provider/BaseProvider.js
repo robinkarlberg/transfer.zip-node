@@ -1,3 +1,4 @@
+import { deleteKeyRecurse } from "../s3.js";
 import { BaseUploader } from "../uploader/BaseUploader.js";
 import validateFileId, { parseMeta } from "./providerUtils.js";
 
@@ -53,7 +54,7 @@ export class BaseProvider {
     throw new Error("must be implemented in subclass");
   }
 
-  async prepareZipBundleStream(transferId, filesList) {
+  async prepareZipBundleArchive(transferId, filesList) {
     throw new Error("must be implemented in subclass");
   }
 
@@ -85,5 +86,9 @@ export class BaseProvider {
     else {
       return await this.getTransferFileKey(tid, meta.id)
     }
+  }
+
+  async delete(transferId) {
+    throw new Error("not impl")
   }
 }

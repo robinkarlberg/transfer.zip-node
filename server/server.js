@@ -9,6 +9,9 @@ import fastifyFormbody from '@fastify/formbody'
 import fastifySensible from '@fastify/sensible'
 import { Buffer } from "node:buffer"
 import startWorker from './lib/queue/zipperWorker.js'
+import { Job } from 'bullmq'
+import { finished } from 'node:stream/promises'
+import { PassThrough } from 'node:stream'
 
 const app = Fastify({ logger: true, requestTimeout: 0 })
 app.register(fastifySensible)
@@ -95,42 +98,66 @@ app.addContentTypeParser(
 );
 
 const handleDownload = async (req, reply) => {
-  const { tid, size, filesCount, firstFile } = req.auth
+  const { tid, size, filesCount, name } = req.auth
 
+  let hasBundle = null
+
+  /** @type {Job} */
+  const zipperJob = await zipperQueue.getJob(tid)
+  if (zipperJob) {
+    const state = await zipperJob.getState()
+    if (["active", "delayed", "failed", "waiting"].includes(state)) {
+      // Doesn't have bundle if job is in this state
+      hasBundle = false
+
+      console.warn(`The zipper job for ${tid} was in '${state}' state while downloading.`)
+    }
+  }
+
+  // If hasBundle hasnt been set to false with the zipperJob check
+  if (hasBundle === null) {
+    // Maybe has a bundle
+    hasBundle = await provider.hasBundle(tid)
+  }
+
+  console.log("has bundle ?", hasBundle)
   let result
-  const hasBundle = await provider.hasBundle(tid)
   if (hasBundle) {
-    // Returns either stream with fileInfo, or an download url
-    result = await provider.prepareBundleSaved(tid, firstFile?.name ?? "transfer.zip")
+    // Returns either stream with fileType, or a download url
+    result = await provider.prepareBundleSaved(tid, name)
   }
   else {
-    const zipperJob = await zipperQueue.getJob(tid)
     if (!zipperJob) {
-      throw new Error(`Transfer ${tid} does not have a bundle, and does not have a zipper job. Something is wrong!`)
+      throw new Error(`Transfer ${tid} does not have a bundle, and does not have a zipper job. Something is wrong! We can not get the file data if the job can't be found.`)
     }
 
     const { filesList } = zipperJob.data
 
-    const { stream, done /* "done" is just for logging */ } = await provider.prepareZipBundleStream(tid, filesList)
-    result = {
-      stream,
-      fileInfo: {
-        type: "application/zip",
-        name: "transfer.zip",
-      }
-    }
+    reply.header('Content-Type', "application/zip")
+    reply.header('Content-Disposition', `attachment; filename="${name}"`)
+
+    // reply.raw.write(`Content-Type: application/zip\r\nContent-Disposition: attachment; filename="${name}"\r\n\r\n`)
+
+    const passThrough = new PassThrough()
+    reply.send(passThrough)
+    await provider.prepareZipBundleArchive(tid, filesList, passThrough)
+    return
   }
 
-  const { url, stream, fileInfo } = result
+  const { url, stream, fileType } = result
   if (url) {
     reply.redirect(url)
   }
-  else {
-    const { type, name } = fileInfo
-    reply.header('Content-Type', type)
+  else if (stream) {
+    if (fileType) {
+      reply.header('Content-Type', fileType)
+    }
     reply.header('Content-Disposition', `attachment; filename="${name}"`)
 
     reply.send(stream)
+    // if (archive) {
+    //   archive.finalize()
+    // }
   }
 }
 
@@ -142,10 +169,14 @@ const handleUpload = (req, reply) => {
 
 const handleControlTransferStatus = async (req) => {
   const { transferId } = req.body
-
   const hasZipBundle = await provider.hasBundle(transferId)
-
   return { hasZipBundle }
+}
+
+const handleControlTransferDelete = async (req) => {
+  const { transferId } = req.body
+  await provider.delete(transferId)
+  return { success: true }
 }
 
 const handleControlUploadComplete = async (req) => {
@@ -155,7 +186,14 @@ const handleControlUploadComplete = async (req) => {
   // If there is only one file, the bundle IS that file already (to avoid zipping one file)
   if (filesList.length > 1) {
     console.log("Adding to zipperQueue:", transferId, filesList)
-    await zipperQueue.add(`${transferId}-zipper`, { filesList }, { jobId: transferId })
+    await zipperQueue.add(`${transferId}-zipper`, { filesList }, {
+      jobId: transferId,
+      attempts: 10,
+      backoff: {
+        type: "exponential",
+        delay: 1000
+      }
+    })
   }
 
   return { success: true }
@@ -164,8 +202,8 @@ const handleControlUploadComplete = async (req) => {
 app.register(async function (app) {
   await app.register(fastifyFormbody)
 
-  app.post('/download', { preHandler: needsScope('download', true) }, async (req, reply) => {
-    return await handleDownload(req, reply)
+  app.post('/download', { preHandler: needsScope('download', true) }, (req, reply) => {
+    handleDownload(req, reply)
   })
 })
 
@@ -191,11 +229,24 @@ app.post('/control/transferStatus', { preHandler: needsScope('control') }, async
   return await handleControlTransferStatus(req, reply)
 })
 
+app.post('/control/transfer/delete', { preHandler: needsScope('control') }, async (req, reply) => {
+  return await handleControlTransferDelete(req, reply)
+})
+
 app.post('/control/uploadComplete', { preHandler: needsScope('control') }, async (req, reply) => {
   return await handleControlUploadComplete(req, reply)
 })
 
-app.get('/healthz', () => ({ success: true }))
+app.get('/ping', () => ({ success: true }))
+
+process.on('uncaughtException', err => {
+  console.error('[PROCESS LEVEL] Uncaught Exception:', err)
+})
+
+process.on('unhandledRejection', reason => {
+  console.error('[PROCESS LEVEL] Unhandled Rejection:', reason)
+})
 
 startWorker()
 await app.listen({ port: 3050, host: '0.0.0.0' })
+
