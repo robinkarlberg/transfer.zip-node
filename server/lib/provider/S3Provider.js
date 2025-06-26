@@ -96,7 +96,7 @@ export class S3Provider extends BaseProvider {
     const BYTE_WIN = 10 * 1024 * 1024       // 10 MB
 
     const streamLimiter = new Bottleneck({ maxConcurrent: STREAMS })
-    const byteLimiter = new Bottleneck({ maxConcurrent: BYTE_WIN })
+    const byteLimiter = new Bottleneck({ reservoir: BYTE_WIN })
     let aborted = false
     const archive = archiver('zip', { forceZip64: true, store: true })
       .on('error', err => aborted ? console.warn('client aborted') : console.error(err))
@@ -107,16 +107,18 @@ export class S3Provider extends BaseProvider {
     const tasks = files.map(f =>
       streamLimiter.schedule(() =>
         byteLimiter.schedule({ weight: clampWeight(f.size, BYTE_WIN) }, async () => {
-          const key = await this.getTransferFileKey(transferId, f.id)
-          const { Body } = await getObject(this.client, this.config.bucket, key)
+          const key = await this.getTransferFileKey(transferId, f.id);
+          const { Body } = await getObject(this.client, this.config.bucket, key);
 
-          archive.append(Body, { name: f.relativePath, size: f.size })
-          await finished(Body)
+          archive.append(Body, { name: f.relativePath, size: f.size });
+
+          // give tokens back when this Body is done
+          Body.once('end', () =>
+            byteLimiter.incrementReservoir(clampWeight(f.size, BYTE_WIN))
+          );
         })
-      ).finally(() =>               // give the tokens back
-        byteLimiter.incrementReservoir(clampWeight(f.size, BYTE_WIN))
       )
-    )
+    );
 
     await Promise.all(tasks)
     archive.finalize()
