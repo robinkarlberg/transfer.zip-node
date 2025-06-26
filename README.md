@@ -1,5 +1,8 @@
 # Transfer.zip-node
 
+> [!WARNING] 
+> This is Work in Progress, not working yet
+
 Repo for [Transfer.zip](https://Transfer.zip) "node" server.
 
 A node server handles file operations and storage. They can be distributed across the world to be close to users.
