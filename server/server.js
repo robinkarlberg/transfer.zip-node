@@ -85,7 +85,7 @@ const tus = new TusServer({
   },
   generateUrl(req, { proto, host, path, id }) {
     const encoded = Buffer.from(id, "utf8").toString("base64url");
-    return `${proto}://${host}${path}/${encoded}`;
+    return `/${encoded}`;
   },
   getFileIdFromRequest(req, lastPath) {
     return Buffer.from(lastPath, "base64url").toString("utf8");
