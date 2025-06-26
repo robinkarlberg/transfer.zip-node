@@ -9,6 +9,7 @@ import validateFileId, { parseMeta } from "./providerUtils.js";
 import { PassThrough } from "stream";
 import { finished, pipeline } from "stream/promises";
 import Bottleneck from "bottleneck";
+import { DiskCacheS3Store } from "../store/S3DiskCacheS3Store.js";
 
 export class S3Provider extends BaseProvider {
   constructor(config) {
@@ -18,7 +19,7 @@ export class S3Provider extends BaseProvider {
     // new S3Client({
     //   endpoint
     // })
-    this.datastore = new S3Store({
+    this.datastore = new DiskCacheS3Store({
       s3ClientConfig: {
         endpoint: this.config.s3.endpoint,
         region: this.config.s3.region,
@@ -27,6 +28,8 @@ export class S3Provider extends BaseProvider {
       },
       partSize: conf.partSizeMB * 1024 ** 2,
       queueSize: this.config.parallelWrites,
+      maxConcurrentPartUploads: 8,
+      maxCachedChunks: 2
     })
 
     // this.client.config.credentials().then(console.log)

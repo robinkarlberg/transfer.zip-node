@@ -90,6 +90,9 @@ const tus = new TusServer({
   getFileIdFromRequest(req, lastPath) {
     return Buffer.from(lastPath, "base64url").toString("utf8");
   },
+  onResponseError: (req, err) => {
+    console.error("TUS ERROR:", req, err)
+  }
 })
 
 app.addContentTypeParser(
