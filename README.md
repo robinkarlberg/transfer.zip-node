@@ -11,15 +11,23 @@ They can be configured for different types of storage: S3 compatible APIs and lo
 
 ## Setting Up
 
+### Env
+
 Copy the example configuration and env and edit them.
 
 ```
 cd server
-cp conf.example.json conf.json
+cp conf.json.example conf.json
 cp .env.example .env
 ```
 
 Edit `conf.json`
+
+### Cryptographic keys
+
+You need the public key from your [transfer.zip-web](https://github.com/robinkarlberg/transfer.zip-web) server.
+
+Documentation how to do this is in that repo.
 
 ## Authentication
 
