@@ -6,6 +6,18 @@ A node server handles file operations and storage. They can be distributed acros
 
 They can be configured for different types of storage: S3 compatible APIs and local disk.
 
+## Setting Up
+
+Copy the example configuration and env and edit them.
+
+```
+cd server
+cp conf.example.json conf.json
+cp .env.example .env
+```
+
+Edit `conf.json`
+
 ## Authentication
 
 The Transfer.zip API server signs a JWT, which then is validated for each node.

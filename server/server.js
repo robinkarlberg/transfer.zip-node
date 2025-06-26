@@ -239,6 +239,8 @@ app.post('/control/uploadComplete', { preHandler: needsScope('control') }, async
 
 app.get('/ping', () => ({ success: true }))
 
+// app.get("/robots.txt", () => )
+
 process.on('uncaughtException', err => {
   console.error('[PROCESS LEVEL] Uncaught Exception:', err)
 })

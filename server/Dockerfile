@@ -9,7 +9,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm i
 
-COPY ./lib ./
+COPY lib ./lib
 COPY conf.json ./
 COPY server.js ./
 
