@@ -1,5 +1,5 @@
 services:
-  worker:
+  server:
     build: server
     volumes:
       - ./keys:/keys
