@@ -125,10 +125,24 @@ const handleDownload = async (req, reply) => {
   }
 
   console.log("has bundle ?", hasBundle)
-  let result
   if (hasBundle) {
     // Returns either stream with fileType, or a download url
-    result = await provider.prepareBundleSaved(tid, name)
+    const { url, stream, fileType } = await provider.prepareBundleSaved(tid, name)
+
+    if (url) {
+      reply.redirect(url)
+    }
+    else if (stream) {
+      if (fileType) {
+        reply.header('Content-Type', fileType)
+      }
+      reply.header('Content-Disposition', `attachment; filename="${name}"`)
+
+      reply.send(stream)
+      // if (archive) {
+      //   archive.finalize()
+      // }
+    }
   }
   else {
     if (!zipperJob) {
@@ -140,28 +154,9 @@ const handleDownload = async (req, reply) => {
     reply.header('Content-Type', "application/zip")
     reply.header('Content-Disposition', `attachment; filename="${name}"`)
 
-    // reply.raw.write(`Content-Type: application/zip\r\nContent-Disposition: attachment; filename="${name}"\r\n\r\n`)
-
     const passThrough = new PassThrough()
     reply.send(passThrough)
     await provider.prepareZipBundleArchive(tid, filesList, passThrough)
-    return
-  }
-
-  const { url, stream, fileType } = result
-  if (url) {
-    reply.redirect(url)
-  }
-  else if (stream) {
-    if (fileType) {
-      reply.header('Content-Type', fileType)
-    }
-    reply.header('Content-Disposition', `attachment; filename="${name}"`)
-
-    reply.send(stream)
-    // if (archive) {
-    //   archive.finalize()
-    // }
   }
 }
 
@@ -255,6 +250,6 @@ process.on('unhandledRejection', reason => {
   console.error('[PROCESS LEVEL] Unhandled Rejection:', reason)
 })
 
+await provider.init()
 startWorker()
 await app.listen({ port: 3050, host: '0.0.0.0' })
-

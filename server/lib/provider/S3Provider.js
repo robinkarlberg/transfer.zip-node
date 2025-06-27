@@ -1,5 +1,5 @@
 import archiver from "archiver"
-import { deleteKeyRecurse, getObject, headBucket, listAllObjects, listBuckets, signDownload } from "../s3.js";
+import { deleteKeyRecurse, getObject, headBucket, listAllObjects, listBuckets, setAbortMultipartLifecycle, signDownload } from "../s3.js";
 import { BaseProvider } from "./BaseProvider.js";
 import { Upload } from "@aws-sdk/lib-storage";
 import { conf } from "../config.js";
@@ -15,10 +15,6 @@ export class S3Provider extends BaseProvider {
   constructor(config) {
     super(config)
     this.client = new S3Client(this.config.s3)
-    // this.datastore here
-    // new S3Client({
-    //   endpoint
-    // })
     this.datastore = new DiskCacheS3Store({
       s3ClientConfig: {
         endpoint: this.config.s3.endpoint,
@@ -37,6 +33,10 @@ export class S3Provider extends BaseProvider {
     // listAllObjects(this.client, "kb-dev-0", "/").then(console.log)
     // console.log(this.config.s3)
     // console.log(this.client)
+  }
+
+  async init() {
+    await setAbortMultipartLifecycle(this.client, this.config.bucket)
   }
 
   getRootKey() {
@@ -118,7 +118,14 @@ export class S3Provider extends BaseProvider {
       console.log("reading:", f.name)
       archive.append(Body, { name: f.relativePath, size: f.size });
 
-      await finished(Body)
+      console.log("append:", f.name)
+      await new Promise((resolve, reject) => {
+        archive.append(Body, { name: f.relativePath, size: f.size }, err => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      // await finished(Body)
       // give tokens back when this Body is done
       // Body.once('end', () => {
       //   console.log("Done:", f.name)

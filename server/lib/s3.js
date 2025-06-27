@@ -10,6 +10,7 @@ import {
   ListBucketsCommand,
   DeleteObjectsCommand,
   DeleteObjectCommand,
+  PutBucketLifecycleConfigurationCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -151,6 +152,28 @@ export async function deleteKey(client, bucket, key) {
     new DeleteObjectCommand({
       Bucket: bucket,
       Key: key
+    })
+  )
+}
+
+export async function setAbortMultipartLifecycle(client, bucketName) {
+  return client.send(
+    new PutBucketLifecycleConfigurationCommand({
+      Bucket: bucketName,
+      LifecycleConfiguration: {
+        Rules: [
+          {
+            ID: "AbortIncompleteMultipartUploadsAfter2Days",
+            Status: "Enabled",
+            AbortIncompleteMultipartUpload: {
+              DaysAfterInitiation: 2
+            },
+            Filter: {
+              Prefix: ""
+            }
+          }
+        ]
+      }
     })
   )
 }

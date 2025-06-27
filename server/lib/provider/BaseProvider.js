@@ -10,6 +10,10 @@ export class BaseProvider {
     this.uploader = uploader;
   }
 
+  async init() {
+    
+  }
+
   async hasBundle(transferId) {
     throw new Error("must be implemented in subclass");
   }
