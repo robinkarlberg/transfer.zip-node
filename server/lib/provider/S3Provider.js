@@ -110,15 +110,19 @@ export class S3Provider extends BaseProvider {
     const tasks = files.map(f =>
       streamLimiter.schedule(() =>
         byteLimiter.schedule({ weight: clampWeight(f.size, BYTE_WIN) }, async () => {
+          console.log("getTransferFileKey:", f.name)
           const key = await this.getTransferFileKey(transferId, f.id);
+          console.log("getObject:", f.name)
           const { Body } = await getObject(this.client, this.config.bucket, key);
 
+          console.log("reading:", f.name)
           archive.append(Body, { name: f.relativePath, size: f.size });
 
           // give tokens back when this Body is done
-          Body.once('end', () =>
+          Body.once('end', () => {
+            console.log("Done:", f.name)
             byteLimiter.incrementReservoir(clampWeight(f.size, BYTE_WIN))
-          );
+          });
         })
       )
     );

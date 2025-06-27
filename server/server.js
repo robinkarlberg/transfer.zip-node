@@ -12,6 +12,7 @@ import startWorker from './lib/queue/zipperWorker.js'
 import { Job } from 'bullmq'
 import { finished } from 'node:stream/promises'
 import { PassThrough } from 'node:stream'
+import { randomHttpErrorInDev } from './lib/dev/randomError.js'
 
 const app = Fastify({ logger: true, requestTimeout: 0 })
 app.register(fastifySensible)
@@ -215,6 +216,7 @@ app.route({
   url: '/upload',
   preHandler: needsScope('upload'),
   handler: (req, reply) => {
+    randomHttpErrorInDev(0.05)
     handleUpload(req, reply)
   }
 })
@@ -224,6 +226,7 @@ app.route({
   url: '/upload/*',
   preHandler: needsScope('upload'),
   handler: (req, reply) => {
+    randomHttpErrorInDev(0.05)
     handleUpload(req, reply)
   }
 })
