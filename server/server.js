@@ -218,7 +218,8 @@ app.route({
   url: '/upload',
   preHandler: needsScope('upload'),
   handler: (req, reply) => {
-    randomHttpErrorInDev(0.05)
+    // TODO: retry request if initial /upload fails
+    // randomHttpErrorInDev(0.05)
     handleUpload(req, reply)
   }
 })
