@@ -43,6 +43,7 @@ export class S3Provider extends BaseProvider {
     return ``
   }
 
+  /** TODO: Cache this lol */
   async hasBundle(transferId) {
     try {
       await headBucket(this.client, this.config.bucket, this.getBundleKey(transferId))
@@ -95,11 +96,12 @@ export class S3Provider extends BaseProvider {
   }
 
   async prepareZipBundleArchive(transferId, files, stream) {
-    const STREAMS = 4
-    const BYTE_WIN = 10 * 1024 * 1024       // 10 MB
+    // TODO: Fix this shit if even possible
+    // const STREAMS = 4
+    // const BYTE_WIN = 10 * 1024 * 1024       // 10 MB
 
-    const streamLimiter = new Bottleneck({ maxConcurrent: STREAMS })
-    const byteLimiter = new Bottleneck({ reservoir: BYTE_WIN })
+    // const streamLimiter = new Bottleneck({ maxConcurrent: STREAMS })
+    // const byteLimiter = new Bottleneck({ reservoir: BYTE_WIN })
     let aborted = false
     const archive = archiver('zip', { forceZip64: true, store: true })
       .on('error', err => aborted ? console.warn('client aborted') : console.error(err))
@@ -107,27 +109,44 @@ export class S3Provider extends BaseProvider {
     pipeline(archive, stream)
     stream.once('close', () => { aborted = true })
 
-    const tasks = files.map(f =>
-      streamLimiter.schedule(() =>
-        byteLimiter.schedule({ weight: clampWeight(f.size, BYTE_WIN) }, async () => {
-          console.log("getTransferFileKey:", f.name)
-          const key = await this.getTransferFileKey(transferId, f.id);
-          console.log("getObject:", f.name)
-          const { Body } = await getObject(this.client, this.config.bucket, key);
+    for (const f of files) {
+      console.log("getTransferFileKey:", f.name)
+      const key = await this.getTransferFileKey(transferId, f.id);
+      console.log("getObject:", f.name)
+      const { Body } = await getObject(this.client, this.config.bucket, key);
 
-          console.log("reading:", f.name)
-          archive.append(Body, { name: f.relativePath, size: f.size });
+      console.log("reading:", f.name)
+      archive.append(Body, { name: f.relativePath, size: f.size });
 
-          // give tokens back when this Body is done
-          Body.once('end', () => {
-            console.log("Done:", f.name)
-            byteLimiter.incrementReservoir(clampWeight(f.size, BYTE_WIN))
-          });
-        })
-      )
-    );
+      await finished(Body)
+      // give tokens back when this Body is done
+      // Body.once('end', () => {
+      //   console.log("Done:", f.name)
+      //   byteLimiter.incrementReservoir(clampWeight(f.size, BYTE_WIN))
+      // });
+    }
 
-    await Promise.all(tasks)
+    // const tasks = files.map(f =>
+    //   streamLimiter.schedule(() =>
+    //     byteLimiter.schedule({ weight: clampWeight(f.size, BYTE_WIN) }, async () => {
+    //       console.log("getTransferFileKey:", f.name)
+    //       const key = await this.getTransferFileKey(transferId, f.id);
+    //       console.log("getObject:", f.name)
+    //       const { Body } = await getObject(this.client, this.config.bucket, key);
+
+    //       console.log("reading:", f.name)
+    //       archive.append(Body, { name: f.relativePath, size: f.size });
+
+    //       // give tokens back when this Body is done
+    //       Body.once('end', () => {
+    //         console.log("Done:", f.name)
+    //         byteLimiter.incrementReservoir(clampWeight(f.size, BYTE_WIN))
+    //       });
+    //     })
+    //   )
+    // );
+
+    // await Promise.all(tasks)
     archive.finalize()
   }
 
