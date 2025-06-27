@@ -115,8 +115,8 @@ export class S3Provider extends BaseProvider {
       console.log("getObject:", f.name)
       const { Body } = await getObject(this.client, this.config.bucket, key);
 
-      console.log("reading:", f.name)
-      archive.append(Body, { name: f.relativePath, size: f.size });
+      // console.log("reading:", f.name)
+      // archive.append(Body, { name: f.relativePath, size: f.size });
 
       console.log("append:", f.name)
       await new Promise((resolve, reject) => {
