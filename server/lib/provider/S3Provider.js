@@ -5,7 +5,6 @@ import { Upload } from "@aws-sdk/lib-storage";
 import { conf } from "../config.js";
 import { S3Client } from "@aws-sdk/client-s3";
 import { S3Store } from "@tus/s3-store";
-import validateFileId, { parseMeta } from "./providerUtils.js";
 import { PassThrough } from "stream";
 import { finished, pipeline } from "stream/promises";
 import Bottleneck from "bottleneck";
@@ -25,7 +24,6 @@ export class S3Provider extends BaseProvider {
       partSize: conf.partSizeMB * 1024 ** 2,
       queueSize: this.config.parallelWrites,
       maxConcurrentPartUploads: 8,
-      maxCachedChunks: 2
     })
 
     // this.client.config.credentials().then(console.log)
@@ -77,7 +75,7 @@ export class S3Provider extends BaseProvider {
       leavePartsOnError: false
     })
 
-    await this.prepareZipBundleArchive(transferId, filesList, passThrough)
+    this.prepareZipBundleArchive(transferId, filesList, passThrough)
 
     await uploader.done()
 
@@ -105,6 +103,7 @@ export class S3Provider extends BaseProvider {
     let aborted = false
     const archive = archiver('zip', { forceZip64: true, store: true })
       .on('error', err => aborted ? console.warn('client aborted') : console.error(err))
+      .on("warning", warn => console.warn("Archiver warning:",warn))
 
     pipeline(archive, stream)
     stream.once('close', () => { aborted = true })
@@ -119,13 +118,9 @@ export class S3Provider extends BaseProvider {
       // archive.append(Body, { name: f.relativePath, size: f.size });
 
       console.log("append:", f.name)
-      await new Promise((resolve, reject) => {
-        archive.append(Body, { name: f.relativePath, size: f.size }, err => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-      // await finished(Body)
+      archive.append(Body, { name: f.relativePath });
+      console.log("waiting:", f.name)
+      await finished(Body)
       // give tokens back when this Body is done
       // Body.once('end', () => {
       //   console.log("Done:", f.name)

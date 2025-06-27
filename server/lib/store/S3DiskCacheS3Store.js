@@ -1,95 +1,77 @@
-// disk-cache-s3-store.js  (v4 – capped cache + wait-last)
+// disk-cache-s3-store.js   v5 – single-part cache
 import fs, { promises as fsProm } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { pipeline } from 'node:stream/promises'
-import { randomBytes } from 'crypto'
 import { S3Store } from '@tus/s3-store'
 import { Upload } from '@tus/utils'
 
 export class DiskCacheS3Store extends S3Store {
-  constructor(opts) {
+  constructor (opts) {
     super(opts)
     this.tmpDir = opts.tmpDir || path.join(os.tmpdir(), 'tus-disk-cache')
-    this.maxCachedChunks = opts.maxCachedChunks ?? 4       // ← cap
     fs.mkdirSync(this.tmpDir, { recursive: true })
-
-    /** id → { chain:Promise, accepted:number, queued:number, waiters:Function[] } */
-    this._queues = new Map()
+    this._state = new Map()    // id → { flushing:Promise, tempSize:number }
   }
 
-  /** 1 PATCH = save to temp → enqueue flush; pause if >maxCachedChunks */
-  async write(src, id, offset) {
-    const q = this._queues.get(id) ?? {
-      chain: Promise.resolve(),
-      accepted: offset,
-      queued: 0,
-      waiters: []
+  /* --------- tus API --------- */
+  async write (src, id, offset) {
+    const safeId = id.replaceAll('/', '_')
+    const cachePath = path.join(this.tmpDir, `${safeId}.part`)
+    const st = this._state.get(id) ?? { flushing: Promise.resolve(), tempSize: 0 }
+
+    await st.flushing                                             // wait if a flush is running
+
+    const before = await this.#fileSize(cachePath)
+    await pipeline(src, fs.createWriteStream(cachePath, { flags: 'a' }))
+    const after = await this.#fileSize(cachePath)
+    const delta = after - before
+    st.tempSize = after
+
+    const meta = await this.getMetadata(id)
+    const complete = meta.file.size !== undefined && offset + delta >= meta.file.size
+    const needFlush = st.tempSize >= this.minPartSize || complete
+
+    if (needFlush) {
+      st.flushing = this.#flush(id, cachePath, st.tempSize, complete)
+      await st.flushing
+      st.tempSize = 0
     }
 
-    while (q.queued >= this.maxCachedChunks) {
-      await new Promise(r => q.waiters.push(r))   // back-pressure
-    }
-
-    const safeId = id.replaceAll('/', '_')        // keep your slash-to-underscore rule
-    const fname = path.join(
-      this.tmpDir,
-      `${safeId}-${offset}-${randomBytes(6).toString('base64url')}.part`
-    )
-
-    await pipeline(src, fs.createWriteStream(fname))
-    const size = (await fsProm.stat(fname)).size
-
-    q.queued++
-    q.accepted += size
-
-    /* enqueue background flush, keep order */
-    q.chain = q.chain.then(() =>
-      this.#flush(id, fname, offset, size, q)
-    ).catch(() => { })          // swallow to keep chain alive
-    this._queues.set(id, q)
-
-    /* ---------- wait if this was the FINAL chunk ---------- */
-    const meta = await this.getMetadata(id)       // read once per PATCH
-    const done = meta.file.size !== undefined && q.accepted >= meta.file.size
-    if (done) await q.chain                       // block until flush & MPU complete
-
-    return q.accepted
+    this._state.set(id, st)
+    return offset + delta
   }
 
-  /** make pending bytes visible to HEAD / next PATCH */
-  async getUpload(id) {
+  async getUpload (id) {
     const base = await super.getUpload(id)
-    const pending = this._queues.get(id)?.accepted ?? base.offset
-    return new Upload({ ...base, offset: pending })
+    const safeId = id.replaceAll('/', '_')
+    const pending = await this.#fileSize(path.join(this.tmpDir, `${safeId}.part`))
+    return new Upload({ ...base, offset: base.offset + pending })
   }
 
-  /* ---------- internal helpers ---------- */
-  async #flush(id, filePath, offset, size, q) {
+  /* --------- internals --------- */
+  async #flush (id, filePath, size, final) {
     const meta = await this.getMetadata(id)
     const parts = await this.retrieveParts(id)
     const num = parts.length + 1
-    const done = meta.file.size === offset + size
-
     const stream = fs.createReadStream(filePath)
-    if (size >= this.minPartSize || done) {
+
+    if (size >= this.minPartSize || final) {
       await this.uploadPart(meta, stream, num)
     } else {
       await this.uploadIncompletePart(id, stream)
     }
-    await fsProm.unlink(filePath).catch(() => { })
+    await fsProm.unlink(filePath)
 
-    /* unlock one waiter if cache below cap */
-    q.queued--
-    if (q.waiters.length && q.queued < this.maxCachedChunks) q.waiters.shift()()
-
-    /* finalise upload */
-    if (done) {
+    if (final) {
       const all = await this.retrieveParts(id)
       await this.finishMultipartUpload(meta, all)
       await this.completeMetadata(meta.file)
-      await this.clearCache(id)
-      this._queues.delete(id)
+      this._state.delete(id)
     }
+  }
+
+  async #fileSize (p) {
+    try { return (await fsProm.stat(p)).size } catch { return 0 }
   }
 }

@@ -79,8 +79,8 @@ function needsScope(requiredScope, getTokenFromBody) {
 const tus = new TusServer({
   path: "/upload",
   datastore: provider.datastore,
-  namingFunction: async (req) => {
-    const name = await provider.namingFunction(req)
+  namingFunction: async (req, metadata) => {
+    const name = await provider.namingFunction(req, metadata)
     // console.log("name:", name)
     return name
   },
@@ -184,7 +184,14 @@ const handleControlUploadComplete = async (req) => {
   // If there are more than one file, it should be zipped into the bundle
   // If there is only one file, the bundle IS that file already (to avoid zipping one file)
   if (filesList.length > 1) {
-    console.log("Adding to zipperQueue:", transferId, filesList)
+    const totalSize = filesList.reduce((sum, file) => sum + (file.size || 0), 0)
+    console.log(
+      "Adding to zipperQueue:",
+      transferId,
+      `${filesList.length} files`,
+      `total size: ${totalSize} bytes`,
+      filesList
+    )
     await zipperQueue.add(`${transferId}-zipper`, { filesList }, {
       jobId: transferId,
       attempts: 10,
@@ -211,7 +218,7 @@ app.route({
   url: '/upload',
   preHandler: needsScope('upload'),
   handler: (req, reply) => {
-    randomHttpErrorInDev(0.05)
+    randomHttpErrorInDev(0.2)
     handleUpload(req, reply)
   }
 })
@@ -221,7 +228,7 @@ app.route({
   url: '/upload/*',
   preHandler: needsScope('upload'),
   handler: (req, reply) => {
-    randomHttpErrorInDev(0.05)
+    randomHttpErrorInDev(0.2)
     handleUpload(req, reply)
   }
 })

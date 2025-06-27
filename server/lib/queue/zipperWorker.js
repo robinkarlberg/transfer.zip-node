@@ -15,7 +15,10 @@ const startWorker = () => {
       const result = await provider.createZipBundle(transferId, filesList)
       return result
     },
-    { connection }
+    {
+      connection,
+      concurrency: 3
+    }
   );
 
   worker.on("failed", async (job, err) => {

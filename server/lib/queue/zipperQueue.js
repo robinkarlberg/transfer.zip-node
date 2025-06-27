@@ -31,13 +31,4 @@ console.log(
     .join("\n")
 )
 
-// const latestJob = jobsSorted[0]
-// if (latestJob) {
-//   const state = await latestJob.getState()
-//   if (state === 'active') {
-//     await latestJob.retry()
-//     console.log(`Retried job: ${latestJob.name} (${latestJob.id})`)
-//   }
-// }
-
 export default zipperQueue

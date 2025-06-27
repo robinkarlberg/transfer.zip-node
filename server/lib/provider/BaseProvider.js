@@ -1,6 +1,6 @@
 import { deleteKeyRecurse } from "../s3.js";
 import { BaseUploader } from "../uploader/BaseUploader.js";
-import validateFileId, { parseMeta } from "./providerUtils.js";
+import { validateFileId } from "./providerUtils.js";
 
 export class BaseProvider {
   constructor(config, uploader) {
@@ -71,10 +71,8 @@ export class BaseProvider {
     })
   }
 
-  async namingFunction(req) {
-    const meta = parseMeta(req.headers.get("upload-metadata"))
-
-    if (!validateFileId(meta.id)) {
+  async namingFunction(req, metadata) {
+    if (!validateFileId(metadata.id)) {
       throw new Error('Invalid fileId')
     }
 
@@ -88,7 +86,7 @@ export class BaseProvider {
       return this.getBundleKey(tid)
     }
     else {
-      return await this.getTransferFileKey(tid, meta.id)
+      return await this.getTransferFileKey(tid, metadata.id)
     }
   }
 
