@@ -218,7 +218,7 @@ app.route({
   url: '/upload',
   preHandler: needsScope('upload'),
   handler: (req, reply) => {
-    randomHttpErrorInDev(0.2)
+    randomHttpErrorInDev(0.05)
     handleUpload(req, reply)
   }
 })
@@ -228,7 +228,7 @@ app.route({
   url: '/upload/*',
   preHandler: needsScope('upload'),
   handler: (req, reply) => {
-    randomHttpErrorInDev(0.2)
+    randomHttpErrorInDev(0.05)
     handleUpload(req, reply)
   }
 })
