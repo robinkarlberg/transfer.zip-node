@@ -276,4 +276,4 @@ process.on('unhandledRejection', reason => {
 
 await provider.init()
 startWorker()
-await app.listen({ port: 3050, host: '127.0.0.1' })
+await app.listen({ port: 3050, host: process.env.NODE_ENV === "development" ? '127.0.0.1' : '0.0.0.0' })
