@@ -174,7 +174,23 @@ const handleControlTransferStatus = async (req) => {
 
 const handleControlTransferDelete = async (req) => {
   const { transferId } = req.body
+
+  // TODO: Handle edge cases when zipper job is active or waiting
+  // try {
+  //   const zipperJob = await zipperQueue.getJob(transferId)
+  //   if (zipperJob) {
+  //     const state = await zipperJob.getState()
+  //     if (state === 'active') {
+  //       await zipperJob.moveToFailed(new Error('Job stopped because'), true)
+  //     }
+  //     await zipperJob.remove()
+  //   }
+  // }
+  // catch (err) {
+  //   console.error("Failed to stop zipper job:", err)
+  // }
   await provider.delete(transferId)
+
   return { success: true }
 }
 
@@ -260,4 +276,4 @@ process.on('unhandledRejection', reason => {
 
 await provider.init()
 startWorker()
-await app.listen({ port: 3050, host: '0.0.0.0' })
+await app.listen({ port: 3050, host: '127.0.0.1' })
