@@ -8,17 +8,15 @@
         "credentials": {
           "accessKeyId": "",
           "secretAccessKey": ""
-        },
-        "forcePathStyle": true,
-        "requestChecksumCalculation": "WHEN_REQUIRED",
-        "responseChecksumValidation": "WHEN_REQUIRED"
+        }
       },
       "bucket": "<BUCKET_NAME>",
-      "parallelWrites": 1
+      "parallelWrites": 1,
+      "partSizeMB": 64
     },
     "hetzner": {
       "s3": {
-        "region":"EU",
+        "region":"nbg1",
         "endpoint": "https://<LOCATION>.your-objectstorage.com",
         "credentials": {
           "accessKey": "",
@@ -26,12 +24,12 @@
         }
       },
       "bucket": "<BUCKET_NAME>",
-      "parallelWrites": 4
+      "parallelWrites": 4,
+      "partSizeMB": 128
     },
     "local": {
       "root": "./uploads"
     }
   },
-  "partSizeMB": 64,
   "lockTTL": 900000
 }

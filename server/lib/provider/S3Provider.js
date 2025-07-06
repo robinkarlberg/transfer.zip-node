@@ -21,7 +21,7 @@ export class S3Provider extends BaseProvider {
         credentials: this.config.s3.credentials,
         bucket: this.config.bucket,
       },
-      partSize: conf.partSizeMB * 1024 ** 2,
+      partSize: this.config.partSizeMB * 1024 ** 2,
       queueSize: this.config.parallelWrites,
       maxConcurrentPartUploads: 8,
     })
@@ -71,7 +71,7 @@ export class S3Provider extends BaseProvider {
       client: this.client,
       params: { Bucket: this.config.bucket, Key: this.getBundleKey(transferId), Body: passThrough },
       queueSize: this.config.parallelWrites,
-      partSize: conf.partSizeMB * 1024 ** 2,
+      partSize: this.config.partSizeMB * 1024 ** 2,
       leavePartsOnError: false
     })
 
