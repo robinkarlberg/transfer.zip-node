@@ -7,7 +7,7 @@ import { S3Store } from '@tus/s3-store'
 import { Upload } from '@tus/utils'
 import cron from "node-cron"
 
-const TTL_MS = 2 * 24 * 60 * 60 * 1000      // 2 days
+const TTL_MS = 0.001 * 24 * 60 * 60 * 1000      // 2 days
 const CRON_EXPR = '0 */6 * * *'             // every 6 h
 
 export class DiskCacheS3Store extends S3Store {
