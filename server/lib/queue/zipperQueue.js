@@ -27,17 +27,18 @@ const activeJobsWithState = jobsWithState
   .map(({ job, state }) => [
     job.name,
     job.failedReason,
-    state
+    state,
+    new Date(job.timestamp).toISOString()
   ])
 
 console.log(
   "\n" +
   [
-    ["Name", "Reason", "State"],
-    ["=====", "=====", "====="],
+    ["Name", "Reason", "State", "Timestamp"],
+    ["=====", "=====", "=====", "========="],
     ...activeJobsWithState
   ]
-    .map(row => row.map(cell => String(cell).padEnd(50)).join("| "))
+    .map(row => row.map(cell => String(cell).padEnd(42)).join("| "))
     .join("\n")
 )
 
