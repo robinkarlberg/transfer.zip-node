@@ -1,4 +1,12 @@
 services:
+  server:
+    build: server
+    volumes:
+      - ./keys:/keys
+    ports: []
+    env_file:
+      - server/.env
+
   caddy:
     image: caddy:2.8-alpine
     depends_on:
@@ -12,6 +20,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    env_file:
+      - .env
 
 volumes:
   caddy_data: {}
