@@ -3,7 +3,7 @@
 	email {$CADDY_ACME_EMAIL}
 }
 
-${CADDY_DOMAIN} {
+{$CADDY_DOMAIN} {
 	# Forward everything to the Fastify container
 	reverse_proxy server:3050 {
 		header_up X-Real-IP {remote_host}

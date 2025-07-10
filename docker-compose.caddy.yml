@@ -11,8 +11,6 @@ services:
     image: caddy:2.8-alpine
     depends_on:
       - server
-    environment:
-      - CADDY_DOMAIN=${CADDY_DOMAIN:-example.com}
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
