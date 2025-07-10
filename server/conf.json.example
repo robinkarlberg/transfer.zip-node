@@ -20,7 +20,7 @@
         "endpoint": "https://<LOCATION>.your-objectstorage.com",
         "credentials": {
           "accessKey": "",
-          "secretKey": ""
+          "secretAccessKey": ""
         }
       },
       "bucket": "<BUCKET_NAME>",
