@@ -35,6 +35,9 @@ export class S3Provider extends BaseProvider {
 
   async init() {
     await setAbortMultipartLifecycle(this.client, this.config.bucket)
+    if (this.datastore && this.datastore.init) {
+      await this.datastore.init()
+    }
   }
 
   getRootKey() {
@@ -103,7 +106,7 @@ export class S3Provider extends BaseProvider {
     let aborted = false
     const archive = archiver('zip', { forceZip64: true, store: true })
       .on('error', err => aborted ? console.warn('client aborted') : console.error(err))
-      .on("warning", warn => console.warn("Archiver warning:",warn))
+      .on("warning", warn => console.warn("Archiver warning:", warn))
 
     pipeline(archive, stream)
     stream.once('close', () => { aborted = true })
