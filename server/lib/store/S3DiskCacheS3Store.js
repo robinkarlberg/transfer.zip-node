@@ -10,8 +10,8 @@ import cron from "node-cron"
 const DEBUG = true
 const DEBUG_FAST_SWEEP = false
 
-const TTL_MS = DEBUG_FAST_SWEEP ? 30 * 1000 : 10 * 60 * 1000       // 30 seconds if FAST_SWEEP, else 10min
-const CRON_EXPR = DEBUG_FAST_SWEEP ? '*/15 * * * * *' : '*/5 * * * *'       // every 15 sec if FAST_SWEEP, else every 5 min
+const TTL_MS = DEBUG_FAST_SWEEP ? 30 * 1000 : 30 * 60 * 1000       // 30 seconds if FAST_SWEEP, else 30min
+const CRON_EXPR = DEBUG_FAST_SWEEP ? '*/15 * * * * *' : '*/10 * * * *'       // every 15 sec if FAST_SWEEP, else every 10 min
 
 export class DiskCacheS3Store extends S3Store {
   constructor(opts) {
