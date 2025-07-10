@@ -19,7 +19,7 @@
         "region":"nbg1",
         "endpoint": "https://<LOCATION>.your-objectstorage.com",
         "credentials": {
-          "accessKey": "",
+          "accessKeyId": "",
           "secretAccessKey": ""
         }
       },
