@@ -2,5 +2,6 @@
 node_modules
 
 /_local_dev_keys/
+/_local_dev_local_data/
 /_uploads
 /keys/

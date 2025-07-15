@@ -7,6 +7,8 @@ services:
       - 127.0.0.1:${SERVER_FORWARD_PORT:-3050}:3050
     env_file:
       - server/.env
+    volumes:
+      - local-data:/data
     
   redis:
     image: redis:8.0-alpine
@@ -22,3 +24,4 @@ services:
 
 volumes:
   redis-data: {}
+  local-data: {}

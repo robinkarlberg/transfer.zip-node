@@ -11,7 +11,9 @@ export class BaseProvider {
   }
 
   async init() {
-    
+    if (this.datastore && this.datastore.init) {
+      await this.datastore.init()
+    }
   }
 
   async hasBundle(transferId) {

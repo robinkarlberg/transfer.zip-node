@@ -35,9 +35,6 @@ export class S3Provider extends BaseProvider {
 
   async init() {
     await setAbortMultipartLifecycle(this.client, this.config.bucket)
-    if (this.datastore && this.datastore.init) {
-      await this.datastore.init()
-    }
   }
 
   getRootKey() {
@@ -97,12 +94,6 @@ export class S3Provider extends BaseProvider {
   }
 
   async prepareZipBundleArchive(transferId, files, stream) {
-    // TODO: Fix this shit if even possible
-    // const STREAMS = 4
-    // const BYTE_WIN = 10 * 1024 * 1024       // 10 MB
-
-    // const streamLimiter = new Bottleneck({ maxConcurrent: STREAMS })
-    // const byteLimiter = new Bottleneck({ reservoir: BYTE_WIN })
     let aborted = false
     const archive = archiver('zip', { forceZip64: true, store: true })
       .on('error', err => aborted ? console.warn('client aborted') : console.error(err))
@@ -117,49 +108,15 @@ export class S3Provider extends BaseProvider {
       console.log("getObject:", f.name)
       const { Body } = await getObject(this.client, this.config.bucket, key);
 
-      // console.log("reading:", f.name)
-      // archive.append(Body, { name: f.relativePath, size: f.size });
-
       console.log("append:", f.name)
       archive.append(Body, { name: f.relativePath });
       console.log("waiting:", f.name)
       await finished(Body)
-      // give tokens back when this Body is done
-      // Body.once('end', () => {
-      //   console.log("Done:", f.name)
-      //   byteLimiter.incrementReservoir(clampWeight(f.size, BYTE_WIN))
-      // });
     }
-
-    // const tasks = files.map(f =>
-    //   streamLimiter.schedule(() =>
-    //     byteLimiter.schedule({ weight: clampWeight(f.size, BYTE_WIN) }, async () => {
-    //       console.log("getTransferFileKey:", f.name)
-    //       const key = await this.getTransferFileKey(transferId, f.id);
-    //       console.log("getObject:", f.name)
-    //       const { Body } = await getObject(this.client, this.config.bucket, key);
-
-    //       console.log("reading:", f.name)
-    //       archive.append(Body, { name: f.relativePath, size: f.size });
-
-    //       // give tokens back when this Body is done
-    //       Body.once('end', () => {
-    //         console.log("Done:", f.name)
-    //         byteLimiter.incrementReservoir(clampWeight(f.size, BYTE_WIN))
-    //       });
-    //     })
-    //   )
-    // );
-
-    // await Promise.all(tasks)
     archive.finalize()
   }
 
   async delete(transferId) {
     return deleteKeyRecurse(this.client, this.config.bucket, this.getTransferBaseKey(transferId))
   }
-}
-
-function clampWeight(size, WINDOW) {
-  return Math.min(size, WINDOW)
 }

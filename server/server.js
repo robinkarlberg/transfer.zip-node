@@ -123,7 +123,7 @@ const handleDownload = async (req, reply) => {
     // Maybe has a bundle
     hasBundle = await provider.hasBundle(tid)
   }
-
+  
   console.log("has bundle ?", hasBundle)
   if (hasBundle) {
     // Returns either stream with fileType, or a download url
