@@ -12,7 +12,7 @@
       },
       "bucket": "<BUCKET_NAME>",
       "parallelWrites": 1,
-      "partSizeMB": 64
+      "partSizeMB": 128
     },
     "hetzner": {
       "s3": {
@@ -27,9 +27,7 @@
       "parallelWrites": 4,
       "partSizeMB": 128
     },
-    "local": {
-      "root": "./uploads"
-    }
+    "local": {}
   },
   "lockTTL": 900000
 }
