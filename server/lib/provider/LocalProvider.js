@@ -38,8 +38,7 @@ export class LocalProvider extends BaseProvider {
 
   async hasBundle(transferId) {
     try {
-      const path = this.getBundleKey(transferId)
-      console.log(path)
+      const path = this.translateDatastoreKeyPath(this.getBundleKey(transferId))
       const stat = await fs.stat(path);
       return stat.isFile()
     } catch (err) {
