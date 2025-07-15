@@ -1,13 +1,12 @@
 services:
   server:
     build: server
-    volumes:
-      - ./keys:/keys
     ports:
       - 127.0.0.1:${SERVER_FORWARD_PORT:-3050}:3050
     env_file:
       - server/.env
     volumes:
+      - ./keys:/keys
       - local-data:/data
     
   redis:
