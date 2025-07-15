@@ -15,7 +15,7 @@ export class LocalProvider extends BaseProvider {
 
     this.datastore = new FileStore({
       // namingfunction takes care of this
-      directory: "/"
+      directory: process.env.NODE_ENV == "development" ? `../_local_dev_local_data/` : "/data/"
     })
     // this.client.config.credentials().then(console.log)
     // listBuckets(this.client).then(console.log)
@@ -29,7 +29,11 @@ export class LocalProvider extends BaseProvider {
   }
 
   getRootKey() {
-    return process.env.NODE_ENV == "development" ? `../_local_dev_local_data/` : `/data/`
+    return process.env.NODE_ENV == "development" ? `../_local_dev_local_data/` : ``
+  }
+
+  translateDatastoreKeyPath = (key) => {
+    return this.datastore.directory + key
   }
 
   async hasBundle(transferId) {
@@ -47,7 +51,7 @@ export class LocalProvider extends BaseProvider {
   async listFiles(transferId) {
     super.listFiles()
 
-    const dirPath = await this.getTransferFilesBaseKey(transferId)
+    const dirPath = this.translateDatastoreKeyPath(await this.getTransferFilesBaseKey(transferId))
 
     const files = await fs.readdir(dirPath, { withFileTypes: true })
 
@@ -66,7 +70,7 @@ export class LocalProvider extends BaseProvider {
   }
 
   async createZipBundle(transferId, filesList) {
-    const bundlePath = this.getBundleKey(transferId)
+    const bundlePath = this.translateDatastoreKeyPath(this.getBundleKey(transferId))
     await fs.mkdir(path.dirname(bundlePath), { recursive: true })
 
     const fileStream = await fs.open(bundlePath, 'w')
@@ -85,7 +89,7 @@ export class LocalProvider extends BaseProvider {
   }
 
   async prepareBundleSaved(transferId, fileName) {
-    const path = this.getBundleKey(transferId)
+    const path = this.translateDatastoreKeyPath(this.getBundleKey(transferId))
     const fileStream = await fs.open(path, 'r')
     const stream = fileStream.createReadStream()
     stream.on('close', () => fileStream.close())
@@ -103,7 +107,7 @@ export class LocalProvider extends BaseProvider {
 
     for (const f of files) {
       console.log("getTransferFileKey:", f.name)
-      const filePath = await this.getTransferFileKey(transferId, f.id)
+      const filePath = this.translateDatastoreKeyPath(await this.getTransferFileKey(transferId, f.id))
       console.log("getObject:", f.name)
 
       const readStream = _fs.createReadStream(filePath)
@@ -119,7 +123,7 @@ export class LocalProvider extends BaseProvider {
   }
 
   async delete(transferId) {
-    const dirPath = this.getTransferBaseKey(transferId)
+    const dirPath = this.translateDatastoreKeyPath(this.getTransferBaseKey(transferId))
     try {
       console.log("RM:", dirPath)
       const entries = await fs.readdir(dirPath, { withFileTypes: true })
