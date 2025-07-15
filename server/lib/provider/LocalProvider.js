@@ -14,7 +14,7 @@ export class LocalProvider extends BaseProvider {
     this.client = new S3Client(this.config.s3)
 
     this.datastore = new FileStore({
-      directory: this.getRootKey()
+      directory: "/data/"
     })
     // this.client.config.credentials().then(console.log)
     // listBuckets(this.client).then(console.log)
@@ -28,7 +28,7 @@ export class LocalProvider extends BaseProvider {
   }
 
   getRootKey() {
-    return process.env.NODE_ENV == "development" ? `../_local_dev_local_data/` : `/data/`
+    return process.env.NODE_ENV == "development" ? `../_local_dev_local_data/` : `/`
   }
 
   async hasBundle(transferId) {
