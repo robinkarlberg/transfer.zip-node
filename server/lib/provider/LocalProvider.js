@@ -15,7 +15,7 @@ export class LocalProvider extends BaseProvider {
 
     this.datastore = new FileStore({
       // namingfunction takes care of this
-      directory: ""
+      directory: "/"
     })
     // this.client.config.credentials().then(console.log)
     // listBuckets(this.client).then(console.log)
