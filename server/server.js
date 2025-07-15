@@ -81,7 +81,7 @@ const tus = new TusServer({
   datastore: provider.datastore,
   namingFunction: async (req, metadata) => {
     const name = await provider.namingFunction(req, metadata)
-    // console.log("name:", name)
+    console.log("name:", name, "rootkey:", provider.getRootKey(), "bundlekey:", provider.getBundleKey("test"))
     return name
   },
   generateUrl(req, { proto, host, path, id }) {
@@ -123,7 +123,7 @@ const handleDownload = async (req, reply) => {
     // Maybe has a bundle
     hasBundle = await provider.hasBundle(tid)
   }
-  
+
   console.log("has bundle ?", hasBundle)
   if (hasBundle) {
     // Returns either stream with fileType, or a download url
