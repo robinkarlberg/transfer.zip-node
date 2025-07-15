@@ -17,11 +17,20 @@ import { randomHttpErrorInDev } from './lib/dev/randomError.js'
 const app = Fastify({ logger: true, requestTimeout: 0 })
 app.register(fastifySensible)
 
-const pubKey = readFileSync(
+import { existsSync } from 'node:fs'
+
+const pubKeyPath =
   process.env.NODE_ENV === 'development'
     ? '../_local_dev_keys/public.pem'
     : '/keys/public.pem'
-)
+
+if (!existsSync(pubKeyPath)) {
+  console.error("Couldn't find public key.")
+  await new Promise(r => setTimeout(r, 5000))
+  process.exit(1)
+}
+
+const pubKey = readFileSync(pubKeyPath)
 
 app.register(cors, {
   origin: true, // Allow all origins
