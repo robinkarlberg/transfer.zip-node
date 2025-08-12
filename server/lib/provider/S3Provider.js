@@ -106,11 +106,21 @@ export class S3Provider extends BaseProvider {
       console.log("getTransferFileKey:", f.name)
       const key = await this.getTransferFileKey(transferId, f.id);
       console.log("getObject:", f.name)
-      const { Body } = await getObject(this.client, this.config.bucket, key);
 
+      let Body;
+      try {
+        const res = await getObject(this.client, this.config.bucket, key);
+        Body = res.Body
+      }
+      catch (err) {
+        console.error("!FAILED TO GET OBJECT!:", key)
+        console.error(err)
+        continue
+      }
       console.log("append:", f.name)
       archive.append(Body, { name: f.relativePath });
       console.log("waiting:", f.name)
+
       await finished(Body)
     }
     archive.finalize()
