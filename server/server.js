@@ -35,7 +35,7 @@ const pubKey = readFileSync(pubKeyPath)
 app.register(cors, {
   origin: true, // Allow all origins
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['*'],
+  allowedHeaders: ['*', "Authorization"],
 })
 
 app.register(fastifyJwt, {
