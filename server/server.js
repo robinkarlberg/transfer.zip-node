@@ -1,7 +1,6 @@
 import Fastify from 'fastify'
 import fastifyJwt from '@fastify/jwt'
 import { readFileSync } from 'node:fs'
-import { Server as TusServer } from '@tus/server'
 import { provider } from './lib/provider/provider.js'
 import zipperQueue from './lib/queue/zipperQueue.js'
 import cors from '@fastify/cors'
@@ -18,6 +17,7 @@ const app = Fastify({ logger: true, requestTimeout: 0 })
 app.register(fastifySensible)
 
 import { existsSync } from 'node:fs'
+import { signUpload } from './lib/s3.js'
 
 const pubKeyPath =
   process.env.NODE_ENV === 'development'
@@ -85,30 +85,10 @@ function needsScope(requiredScope, getTokenFromBody) {
   };
 }
 
-const tus = new TusServer({
-  path: "/upload",
-  datastore: provider.datastore,
-  namingFunction: async (req, metadata) => {
-    const name = await provider.namingFunction(req, metadata)
-    console.log("name:", name, "rootkey:", provider.getRootKey(), "bundlekey:", provider.getBundleKey("test"))
-    return name
-  },
-  generateUrl(req, { proto, host, path, id }) {
-    const encoded = Buffer.from(id, "utf8").toString("base64url");
-    return `${path}/${encoded}`;
-  },
-  getFileIdFromRequest(req, lastPath) {
-    return Buffer.from(lastPath, "base64url").toString("utf8");
-  },
-  onResponseError: (req, err) => {
-    console.error("TUS ERROR:", req, err)
-  }
-})
-
-app.addContentTypeParser(
-  "application/offset+octet-stream",
-  (request, payload, done) => done(null)
-);
+// app.addContentTypeParser(
+//   "application/offset+octet-stream",
+//   (request, payload, done) => done(null)
+// );
 
 const handleDownload = async (req, reply) => {
   const { tid, size, filesCount, name } = req.auth
@@ -167,12 +147,6 @@ const handleDownload = async (req, reply) => {
     reply.send(passThrough)
     await provider.prepareZipBundleArchive(tid, filesList, passThrough)
   }
-}
-
-const handleUpload = (req, reply) => {
-  // console.log("pre auth:", req.auth)
-  // console.log(req.raw)
-  tus.handle(req.raw, reply.raw)
 }
 
 const handleControlTransferStatus = async (req) => {
@@ -240,22 +214,86 @@ app.register(async function (app) {
 
 app.route({
   method: ['OPTIONS', 'HEAD', 'POST', 'PATCH'],
-  url: '/upload',
+  url: '/upload/sign',
   preHandler: needsScope('upload'),
-  handler: (req, reply) => {
-    // TODO: retry request if initial /upload fails
-    // randomHttpErrorInDev(0.05)
-    handleUpload(req, reply)
+  handler: async (req, reply) => {
+    randomHttpErrorInDev(0.1)
+    const { fileId } = req.body
+    if (!fileId || !/^[0-9a-fA-F]{24}$/.test(fileId)) {
+      return reply.badRequest('Invalid fileId')
+    }
+    
+    const { tid, size, filesCount } = req.auth
+    const url = await provider.signUpload(tid, filesCount, fileId)
+    reply.send({ url })
   }
 })
 
 app.route({
   method: ['OPTIONS', 'HEAD', 'POST', 'PATCH'],
-  url: '/upload/*',
+  url: '/upload/multipart/create',
   preHandler: needsScope('upload'),
-  handler: (req, reply) => {
+  handler: async (req, reply) => {
     randomHttpErrorInDev(0.1)
-    handleUpload(req, reply)
+    const { fileId } = req.body
+    if (!fileId || !/^[0-9a-fA-F]{24}$/.test(fileId)) {
+      return reply.badRequest('Invalid fileId')
+    }
+
+    const { tid, size, filesCount } = req.auth
+    const uploadId = await provider.createMultipart(tid, filesCount, fileId)
+    reply.send({ uploadId })
+  }
+})
+
+app.route({
+  method: ['OPTIONS', 'HEAD', 'POST', 'PATCH'],
+  url: '/upload/multipart/sign-part',
+  preHandler: needsScope('upload'),
+  handler: async (req, reply) => {
+    randomHttpErrorInDev(0.1)
+    const { fileId, uploadId, partNumber } = req.body
+    if (!fileId || !/^[0-9a-fA-F]{24}$/.test(fileId)) {
+      return reply.badRequest('Invalid fileId')
+    }
+
+    const { tid, size, filesCount } = req.auth
+    const url = await provider.signPart(tid, filesCount, fileId, uploadId, partNumber)
+    reply.send({ url })
+  }
+})
+
+app.route({
+  method: ['OPTIONS', 'HEAD', 'POST', 'PATCH'],
+  url: '/upload/multipart/complete',
+  preHandler: needsScope('upload'),
+  handler: async (req, reply) => {
+    randomHttpErrorInDev(0.1)
+    const { fileId, uploadId, parts } = req.body
+    if (!fileId || !/^[0-9a-fA-F]{24}$/.test(fileId)) {
+      return reply.badRequest('Invalid fileId')
+    }
+
+    const { tid, size, filesCount } = req.auth
+    const res = await provider.completeMultipart(tid, filesCount, fileId, uploadId, parts)
+    reply.send({ success: true })
+  }
+})
+
+app.route({
+  method: ['OPTIONS', 'HEAD', 'POST', 'PATCH'],
+  url: '/upload/multipart/abort',
+  preHandler: needsScope('upload'),
+  handler: async (req, reply) => {
+    randomHttpErrorInDev(0.1)
+    const { fileId, uploadId, parts } = req.body
+    if (!fileId || !/^[0-9a-fA-F]{24}$/.test(fileId)) {
+      return reply.badRequest('Invalid fileId')
+    }
+
+    const { tid, size, filesCount } = req.auth
+    const res = await provider.abortMultipart(tid, filesCount, fileId, uploadId)
+    reply.send({ success: true })
   }
 })
 

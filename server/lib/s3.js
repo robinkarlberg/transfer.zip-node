@@ -11,21 +11,59 @@ import {
   DeleteObjectsCommand,
   DeleteObjectCommand,
   PutBucketLifecycleConfigurationCommand,
+  PutBucketCorsCommand
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
-// export async function signUpload({ client, bucket, key, type, maxAge = 3600 }) {
-//   return getSignedUrl(
-//     client,
-//     new PutObjectCommand({
-//       Bucket: bucket,
-//       Key: key,
-//       ContentType: type,        // e.g. "image/png"
-//       ACL: 'private',           // R2 ignores ACL but keeps header for S3 parity
-//     }),
-//     { expiresIn: maxAge },      // seconds (1 s → 7 days)
-//   );
-// }
+export async function signUpload({ client, bucket, key, type, maxAge = 3600 }) {
+  return getSignedUrl(
+    client,
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ContentType: type,        // e.g. "image/png"
+      ACL: 'private',           // R2 ignores ACL but keeps header for S3 parity
+    }),
+    { expiresIn: maxAge },      // seconds (1 s → 7 days)
+  );
+}
+
+export async function createMultipart({ client, bucket, key }) {
+  const { UploadId } = await client.send(
+    new CreateMultipartUploadCommand({ Bucket: bucket, Key: key })
+  );
+  return UploadId;
+}
+
+export async function signPart({ client, bucket, key, uploadId, partNumber, expires = 900 }) {
+  return getSignedUrl(
+    client,
+    new UploadPartCommand({
+      Bucket: bucket,
+      Key: key,
+      UploadId: uploadId,
+      PartNumber: partNumber,
+    }),
+    { expiresIn: expires },
+  );
+}
+
+export async function completeMultipart({ client, bucket, key, uploadId, parts }) {
+  return client.send(
+    new CompleteMultipartUploadCommand({
+      Bucket: bucket,
+      Key: key,
+      UploadId: uploadId,
+      MultipartUpload: { Parts: parts }, // [{PartNumber, ETag}, …]
+    }),
+  );
+}
+
+export async function abortMultipart({ client, bucket, key, uploadId }) {
+  return client.send(
+    new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId }),
+  );
+}
 
 export async function signDownload({ client, bucket, key, fileName, maxAge = 600 }) {
   return getSignedUrl(
@@ -37,43 +75,6 @@ export async function signDownload({ client, bucket, key, fileName, maxAge = 600
     { expiresIn: maxAge },
   );
 }
-
-// export async function createMultipart(client, bucket, key) {
-//   const { UploadId } = await client.send(
-//     new CreateMultipartUploadCommand({ Bucket: bucket, Key: key })
-//   );
-//   return UploadId;
-// }
-
-// export async function presignPart(client, bucket, key, uploadId, partNumber, expires = 900) {
-//   return getSignedUrl(
-//     client,
-//     new UploadPartCommand({
-//       Bucket: bucket,
-//       Key: key,
-//       UploadId: uploadId,
-//       PartNumber: partNumber,
-//     }),
-//     { expiresIn: expires },
-//   );
-// }
-
-// export async function completeMultipart(client, bucket, key, uploadId, parts) {
-//   return client.send(
-//     new CompleteMultipartUploadCommand({
-//       Bucket: bucket,
-//       Key: key,
-//       UploadId: uploadId,
-//       MultipartUpload: { Parts: parts }, // [{PartNumber, ETag}, …]
-//     }),
-//   );
-// }
-
-// export async function abortMultipart(client, bucket, key, uploadId) {
-//   return client.send(
-//     new AbortMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId }),
-//   );
-// }
 
 export async function headBucket(client, bucket, key) {
   return client.send(new HeadObjectCommand({
@@ -176,4 +177,23 @@ export async function setAbortMultipartLifecycle(client, bucketName) {
       }
     })
   )
+}
+
+export async function setBucketCors(client, bucketName) {
+  return client.send(
+    new PutBucketCorsCommand({
+      Bucket: bucketName,
+      CORSConfiguration: {
+        CORSRules: [
+          {
+            AllowedOrigins: ['http://localhost:3000'],
+            AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
+            AllowedHeaders: ['*'],
+            ExposeHeaders: ['ETag'],
+            MaxAgeSeconds: 3600
+          }
+        ]
+      }
+    })
+  );
 }

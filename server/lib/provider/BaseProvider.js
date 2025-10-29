@@ -64,15 +64,6 @@ export class BaseProvider {
     throw new Error("must be implemented in subclass");
   }
 
-  async presignUpload(transferId, fileId, fileSize) {
-    const key = fileId ? this.getTransferFileKey(transferId, fileId) : this.getBundleKey(transferId)
-
-    return await this.uploader.prepare({
-      key,
-      size: fileSize
-    })
-  }
-
   async namingFunction(req, metadata) {
     if (!validateFileId(metadata.id)) {
       throw new Error('Invalid fileId')

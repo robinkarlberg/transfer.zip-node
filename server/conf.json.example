@@ -10,9 +10,7 @@
           "secretAccessKey": ""
         }
       },
-      "bucket": "<BUCKET_NAME>",
-      "parallelWrites": 1,
-      "partSizeMB": 128
+      "bucket": "<BUCKET_NAME>"
     },
     "hetzner": {
       "s3": {
@@ -23,11 +21,8 @@
           "secretAccessKey": ""
         }
       },
-      "bucket": "<BUCKET_NAME>",
-      "parallelWrites": 4,
-      "partSizeMB": 128
+      "bucket": "<BUCKET_NAME>"
     },
     "local": {}
-  },
-  "lockTTL": 900000
+  }
 }

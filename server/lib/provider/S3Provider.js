@@ -1,5 +1,5 @@
 import archiver from "archiver"
-import { deleteKeyRecurse, getObject, headBucket, listAllObjects, listBuckets, setAbortMultipartLifecycle, signDownload } from "../s3.js";
+import { completeMultipart, createMultipart, deleteKeyRecurse, getObject, headBucket, listAllObjects, listBuckets, setAbortMultipartLifecycle, setBucketCors, signDownload, signPart, signUpload } from "../s3.js";
 import { BaseProvider } from "./BaseProvider.js";
 import { Upload } from "@aws-sdk/lib-storage";
 import { conf } from "../config.js";
@@ -14,17 +14,17 @@ export class S3Provider extends BaseProvider {
   constructor(config) {
     super(config)
     this.client = new S3Client(this.config.s3)
-    this.datastore = new DiskCacheS3Store({
-      s3ClientConfig: {
-        endpoint: this.config.s3.endpoint,
-        region: this.config.s3.region,
-        credentials: this.config.s3.credentials,
-        bucket: this.config.bucket,
-      },
-      partSize: this.config.partSizeMB * 1024 ** 2,
-      queueSize: this.config.parallelWrites,
-      maxConcurrentPartUploads: 8,
-    })
+    // this.datastore = new DiskCacheS3Store({
+    //   s3ClientConfig: {
+    //     endpoint: this.config.s3.endpoint,
+    //     region: this.config.s3.region,
+    //     credentials: this.config.s3.credentials,
+    //     bucket: this.config.bucket,
+    //   },
+    //   partSize: this.config.partSizeMB * 1024 ** 2,
+    //   queueSize: this.config.parallelWrites,
+    //   maxConcurrentPartUploads: 8,
+    // })
 
     // this.client.config.credentials().then(console.log)
     // listBuckets(this.client).then(console.log)
@@ -33,8 +33,59 @@ export class S3Provider extends BaseProvider {
     // console.log(this.client)
   }
 
+  async signUpload(transferId, filesCount, fileId) {
+    const key = filesCount == 1 ? this.getBundleKey(transferId) : await this.getTransferFileKey(transferId, fileId)
+    return signUpload({
+      client: this.client,
+      bucket: this.config.bucket,
+      key
+    })
+  }
+
+  async createMultipart(transferId, filesCount, fileId) {
+    const key = filesCount == 1 ? this.getBundleKey(transferId) : await this.getTransferFileKey(transferId, fileId)
+    return createMultipart({
+      client: this.client,
+      bucket: this.config.bucket,
+      key
+    })
+  }
+
+  async signPart(transferId, filesCount, fileId, uploadId, partNumber) {
+    const key = filesCount == 1 ? this.getBundleKey(transferId) : await this.getTransferFileKey(transferId, fileId)
+    return signPart({
+      client: this.client,
+      bucket: this.config.bucket,
+      key,
+      uploadId,
+      partNumber
+    })
+  }
+
+  async completeMultipart(transferId, filesCount, fileId, uploadId, parts) {
+    const key = filesCount == 1 ? this.getBundleKey(transferId) : await this.getTransferFileKey(transferId, fileId)
+    return completeMultipart({
+      client: this.client,
+      bucket: this.config.bucket,
+      key,
+      uploadId,
+      parts
+    })
+  }
+
+  async abortMultipart(transferId, filesCount, fileId, uploadId) {
+    const key = filesCount == 1 ? this.getBundleKey(transferId) : await this.getTransferFileKey(transferId, fileId)
+    return completeMultipart({
+      client: this.client,
+      bucket: this.config.bucket,
+      key,
+      uploadId
+    })
+  }
+
   async init() {
     await setAbortMultipartLifecycle(this.client, this.config.bucket)
+    await setBucketCors(this.client, this.config.bucket)
   }
 
   getRootKey() {
