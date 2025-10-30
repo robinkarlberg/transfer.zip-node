@@ -1,23 +1,20 @@
-import Fastify from 'fastify'
-import fastifyJwt from '@fastify/jwt'
-import { readFileSync } from 'node:fs'
-import { provider } from './lib/provider/provider.js'
-import zipperQueue from './lib/queue/zipperQueue.js'
 import cors from '@fastify/cors'
 import fastifyFormbody from '@fastify/formbody'
+import fastifyJwt from '@fastify/jwt'
 import fastifySensible from '@fastify/sensible'
-import { Buffer } from "node:buffer"
-import startWorker from './lib/queue/zipperWorker.js'
 import { Job } from 'bullmq'
-import { finished } from 'node:stream/promises'
+import Fastify from 'fastify'
+import { readFileSync } from 'node:fs'
 import { PassThrough } from 'node:stream'
 import { randomHttpErrorInDev } from './lib/dev/randomError.js'
+import { provider } from './lib/provider/provider.js'
+import zipperQueue from './lib/queue/zipperQueue.js'
+import startWorker from './lib/queue/zipperWorker.js'
 
 const app = Fastify({ logger: true, requestTimeout: 0 })
 app.register(fastifySensible)
 
 import { existsSync } from 'node:fs'
-import { signUpload } from './lib/s3.js'
 
 const pubKeyPath =
   process.env.NODE_ENV === 'development'
