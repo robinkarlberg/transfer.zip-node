@@ -9,11 +9,21 @@ import { PassThrough } from "stream";
 import { finished, pipeline } from "stream/promises";
 import Bottleneck from "bottleneck";
 import { DiskCacheS3Store } from "../store/S3DiskCacheS3Store.js";
+import { NodeHttpHandler } from "@smithy/node-http-handler";
+import { Agent } from "https";
+
+const agent = new Agent({
+  keepAlive: true,
+  maxSockets: 1000,
+});
 
 export class S3Provider extends BaseProvider {
   constructor(config) {
     super(config)
-    this.client = new S3Client(this.config.s3)
+    this.client = new S3Client({
+      ...this.config.s3,
+      requestHandler: new NodeHttpHandler({ httpsAgent: agent })
+    })
     this.datastore = new DiskCacheS3Store({
       s3ClientConfig: {
         endpoint: this.config.s3.endpoint,
