@@ -7,7 +7,7 @@ import Fastify from 'fastify'
 import { readFileSync } from 'node:fs'
 import { PassThrough } from 'node:stream'
 import { randomHttpErrorInDev } from './lib/dev/randomError.js'
-import { provider } from './lib/provider/provider.js'
+import { legacyProvider, provider } from './lib/provider/provider.js'
 import zipperQueue from './lib/queue/zipperQueue.js'
 import startWorker from './lib/queue/zipperWorker.js'
 
@@ -88,7 +88,9 @@ function needsScope(requiredScope, getTokenFromBody) {
 // );
 
 const handleDownload = async (req, reply) => {
-  const { tid, size, filesCount, name } = req.auth
+  const { tid, size, filesCount, name, backendVersion } = req.auth
+
+  const chosenProvider = backendVersion == 2 ? provider : legacyProvider
 
   let hasBundle = null
 
@@ -107,13 +109,13 @@ const handleDownload = async (req, reply) => {
   // If hasBundle hasnt been set to false with the zipperJob check
   if (hasBundle === null) {
     // Maybe has a bundle
-    hasBundle = await provider.hasBundle(tid)
+    hasBundle = await chosenProvider.hasBundle(tid)
   }
 
-  console.log("has bundle ?", hasBundle)
+  console.log("Transfer", tid, "has bundle ?", hasBundle)
   if (hasBundle) {
     // Returns either stream with fileType, or a download url
-    const { url, stream, fileType } = await provider.prepareBundleSaved(tid, name)
+    const { url, stream, fileType } = await chosenProvider.prepareBundleSaved(tid, name)
 
     if (url) {
       reply.redirect(url)
@@ -142,19 +144,23 @@ const handleDownload = async (req, reply) => {
 
     const passThrough = new PassThrough()
     reply.send(passThrough)
-    await provider.prepareZipBundleArchive(tid, filesList, passThrough)
+    await chosenProvider.prepareZipBundleArchive(tid, filesList, passThrough)
   }
 }
 
 const handleControlTransferStatus = async (req) => {
-  const { transferId } = req.body
-  const hasZipBundle = await provider.hasBundle(transferId)
+  const { transferId, backendVersion } = req.body
+
+  const chosenProvider = backendVersion == 2 ? provider : legacyProvider
+
+  const hasZipBundle = await chosenProvider.hasBundle(transferId)
   return { hasZipBundle }
 }
 
 const handleControlTransferDelete = async (req) => {
-  const { transferId } = req.body
+  const { transferId, backendVersion } = req.body
 
+  const chosenProvider = backendVersion == 2 ? provider : legacyProvider
   // TODO: Handle edge cases when zipper job is active or waiting
   // try {
   //   const zipperJob = await zipperQueue.getJob(transferId)
@@ -169,7 +175,7 @@ const handleControlTransferDelete = async (req) => {
   // catch (err) {
   //   console.error("Failed to stop zipper job:", err)
   // }
-  await provider.delete(transferId)
+  await chosenProvider.delete(transferId)
 
   return { success: true }
 }
