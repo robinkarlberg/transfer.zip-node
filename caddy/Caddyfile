@@ -7,3 +7,9 @@
   # Forward everything to the server
   reverse_proxy server:3050
 }
+
+# Optional: Download domain - only include this if DL_DOMAIN is set in .env
+# Remove the leading # below and ensure DL_DOMAIN is set in your environment
+# {$DL_DOMAIN} {
+#   reverse_proxy server:3050
+# }
