@@ -22,7 +22,7 @@ const pubKeyPath =
     : '/keys/public.pem'
 
 if (!existsSync(pubKeyPath)) {
-  console.error("Couldn't find public key.")
+  console.log("Couldn't find public key! See https://github.com/robinkarlberg/transfer.zip-web/blob/main/SELFHOSTING.md")
   await new Promise(r => setTimeout(r, 5000))
   process.exit(1)
 }
@@ -101,8 +101,6 @@ const handleDownload = async (req, reply) => {
     if (["active", "delayed", "failed", "waiting"].includes(state)) {
       // Doesn't have bundle if job is in this state
       hasBundle = false
-
-      console.warn(`The zipper job for ${tid} was in '${state}' state while downloading.`)
     }
   }
 
@@ -112,7 +110,6 @@ const handleDownload = async (req, reply) => {
     hasBundle = await chosenProvider.hasBundle(tid)
   }
 
-  console.log("Transfer", tid, "has bundle ?", hasBundle)
   if (hasBundle) {
     // Returns either stream with fileType, or a download url
     const { url, stream, fileType } = await chosenProvider.prepareBundleSaved(tid, name)
@@ -187,13 +184,13 @@ const handleControlUploadComplete = async (req) => {
   // If there is only one file, the bundle IS that file already (to avoid zipping one file)
   if (filesList.length > 1) {
     const totalSize = filesList.reduce((sum, file) => sum + (file.size || 0), 0)
-    console.log(
-      "Adding to zipperQueue:",
-      transferId,
-      `${filesList.length} files`,
-      `total size: ${totalSize} bytes`,
-      filesList
-    )
+    // console.log(
+    //   "Adding to zipperQueue:",
+    //   transferId,
+    //   `${filesList.length} files`,
+    //   `total size: ${totalSize} bytes`,
+    //   filesList
+    // )
     await zipperQueue.add(`${transferId}-zipper`, { filesList }, {
       jobId: transferId,
       attempts: 10,
@@ -316,12 +313,10 @@ app.get('/ping', () => ({ success: true }))
 
 // app.get("/robots.txt", () => )
 
-process.on('uncaughtException', err => {
-  console.error('[PROCESS LEVEL] Uncaught Exception:', err)
+process.on('uncaughtException', () => {
 })
 
-process.on('unhandledRejection', reason => {
-  console.error('[PROCESS LEVEL] Unhandled Rejection:', reason)
+process.on('unhandledRejection', () => {
 })
 
 await provider.init()

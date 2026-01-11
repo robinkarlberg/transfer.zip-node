@@ -96,25 +96,19 @@ export class LocalProvider extends BaseProvider {
   }
 
   async prepareZipBundleArchive(transferId, files, stream) {
-    let aborted = false
     const archive = archiver('zip', { forceZip64: true, store: true })
-      .on('error', err => aborted ? console.warn('client aborted') : console.error(err))
-      .on("warning", warn => console.warn("Archiver warning:", warn))
+      .on('error', () => { })
+      .on("warning", () => { })
 
     pipeline(archive, stream)
-    stream.once('close', () => { aborted = true })
 
     for (const f of files) {
-      console.log("getTransferFileKey:", f.name)
       const filePath = this.translateDatastoreKeyPath(await this.getTransferFileKey(transferId, f.id))
-      console.log("getObject:", f.name)
 
       const readStream = _fs.createReadStream(filePath)
       try {
-        console.log("append:", f.name)
         archive.append(readStream, { name: f.relativePath })
       } finally {
-        console.log("waiting:", f.name)
         await finished(readStream)
       }
     }
@@ -124,7 +118,6 @@ export class LocalProvider extends BaseProvider {
   async delete(transferId) {
     const dirPath = this.translateDatastoreKeyPath(this.getTransferBaseKey(transferId))
     try {
-      console.log("RM:", dirPath)
       const entries = await fs.readdir(dirPath, { withFileTypes: true })
       const forbiddenFiles = entries.filter(entry => {
         if (!entry.isFile()) return false
@@ -132,8 +125,6 @@ export class LocalProvider extends BaseProvider {
         return ext !== '.json' && ext !== ''
       })
       if (forbiddenFiles.length > 0) {
-        console.error(`Delete refused: directory ${dirPath} contains forbidden files:`)
-        forbiddenFiles.forEach(f => console.error(` - ${f.name}`))
         return { ok: false, error: 'Directory contains forbidden files' }
       }
       await fs.rm(dirPath, { recursive: true, force: true })

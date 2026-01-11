@@ -7,7 +7,6 @@ import { S3Store } from '@tus/s3-store'
 import { Upload, TUS_RESUMABLE, ERRORS } from '@tus/utils'
 import cron from "node-cron"
 
-const DEBUG = true
 const DEBUG_FAST_SWEEP = false
 
 const TTL_MS = DEBUG_FAST_SWEEP ? 30 * 1000 : 30 * 60 * 1000       // 30 seconds if FAST_SWEEP, else 30min
@@ -78,9 +77,6 @@ export class DiskCacheS3Store extends S3Store {
     upload.creation_date = info.file.creation_date
     upload.upload_length = 0                 // guarantee the property is set
 
-    if (DEBUG) {
-      console.log(`[${id}] zero-byte upload finalised immediately`)
-    }
     return upload
   }
 
@@ -118,13 +114,6 @@ export class DiskCacheS3Store extends S3Store {
     const safeId = id.replaceAll('/', '_')
     const pending = await this.#fileSize(path.join(this.tmpDir, `${safeId}.part`))
 
-    if (DEBUG) {
-      console.log(
-        '[DiskCacheS3Store:getUpload]',
-        { id, baseOffset: base.offset, pending }
-      )
-    }
-
     return new Upload({ ...base, offset: base.offset + pending })
   }
 
@@ -135,19 +124,9 @@ export class DiskCacheS3Store extends S3Store {
     const num = parts.length + 1
     const stream = fs.createReadStream(filePath)
 
-    if (DEBUG) {
-      console.log('[DiskCacheS3Store:#flush]', { id, size, minPartSize: this.minPartSize, final })
-    }
-
     if (size >= this.minPartSize || final) {
-      if (DEBUG) {
-        console.log('[DiskCacheS3Store:#flush] uploading part', { id, num })
-      }
       await this.uploadPart(meta, stream, num)
     } else {
-      if (DEBUG) {
-        console.log('[DiskCacheS3Store:#flush] uploading incomplete part', { id })
-      }
       await this.uploadIncompletePart(id, stream)
     }
     await fsProm.unlink(filePath)
@@ -165,12 +144,6 @@ export class DiskCacheS3Store extends S3Store {
   }
 
   async #sweepCache(all) {
-    if (all) {
-      console.log('Sweeping ALL disk cache:', this.tmpDir)
-    }
-    else {
-      console.log('Sweeping disk cache:', this.tmpDir)
-    }
     const now = Date.now()
 
     for (const name of await fsProm.readdir(this.tmpDir)) {
@@ -184,15 +157,12 @@ export class DiskCacheS3Store extends S3Store {
         // remove all, usually ran after a reboot to not desync the _state and Disk cache
         // which would lead to a lot of problems. We also do NOT want to delete multipart
         // uploads on reboot, in case an upload is in process while node reboots
-        console.log('Removing previous leftover cache for id:', id, 'file:', file)
 
         // delete the on-disk part file
         await fsProm.unlink(file).catch(() => { })
       }
       else {
         if (now - mtimeMs <= TTL_MS) continue          // keep if newer than 2 days
-
-        console.log('Removing expired cache for id:', id, 'file:', file)
 
         try {
           // This aborts the multipart upload and deletes the info key from the bucket
@@ -215,7 +185,5 @@ export class DiskCacheS3Store extends S3Store {
         }
       }
     }
-
-    console.log("Done sweeping cache!")
   }
 }
