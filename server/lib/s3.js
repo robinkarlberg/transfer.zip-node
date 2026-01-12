@@ -186,7 +186,7 @@ export async function setBucketCors(client, bucketName) {
       CORSConfiguration: {
         CORSRules: [
           {
-            AllowedOrigins: ['http://localhost:3000'],
+            AllowedOrigins: [process.env.NODE_ENV == "development" ? 'http://localhost:3000' : process.env.BUCKET_CORS_ORIGIN],
             AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
             AllowedHeaders: ['*'],
             ExposeHeaders: ['ETag'],
