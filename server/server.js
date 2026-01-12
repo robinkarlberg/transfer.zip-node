@@ -10,11 +10,25 @@ import { randomHttpErrorInDev } from './lib/dev/randomError.js'
 import { legacyProvider, provider } from './lib/provider/provider.js'
 import zipperQueue from './lib/queue/zipperQueue.js'
 import startWorker from './lib/queue/zipperWorker.js'
-
-const app = Fastify({ logger: true, requestTimeout: 0 })
-app.register(fastifySensible)
-
 import { existsSync } from 'node:fs'
+import pino from 'pino'
+
+const PINO_CONF = {
+  level: "info",
+  formatters: {
+    level: (label) => {
+      return { level: label };
+    },
+  },
+}
+
+const logger = pino(PINO_CONF)
+
+const app = Fastify({
+  logger: PINO_CONF,
+  requestTimeout: 0
+})
+app.register(fastifySensible)
 
 const pubKeyPath =
   process.env.NODE_ENV === 'development'
@@ -89,7 +103,6 @@ function needsScope(requiredScope, getTokenFromBody) {
 
 const handleDownload = async (req, reply) => {
   const { tid, size, filesCount, name, backendVersion } = req.auth
-
   const chosenProvider = backendVersion == 2 ? provider : legacyProvider
 
   let hasBundle = null
@@ -156,7 +169,6 @@ const handleControlTransferStatus = async (req) => {
 
 const handleControlTransferDelete = async (req) => {
   const { transferId, backendVersion } = req.body
-
   const chosenProvider = backendVersion == 2 ? provider : legacyProvider
   // TODO: Handle edge cases when zipper job is active or waiting
   // try {
@@ -172,7 +184,9 @@ const handleControlTransferDelete = async (req) => {
   // catch (err) {
   //   console.error("Failed to stop zipper job:", err)
   // }
+  req.log.info(`Deleting transfer: ${transferId} Backend version: ${backendVersion}`)
   await chosenProvider.delete(transferId)
+  req.log.info(`Deleted transfer: ${transferId} Backend version: ${backendVersion}`)
 
   return { success: true }
 }
@@ -180,9 +194,11 @@ const handleControlTransferDelete = async (req) => {
 const handleControlUploadComplete = async (req) => {
   const { transferId, filesList } = req.body
 
+  const willZip = filesList.length > 1
+  req.log.info(`Upload complete: ${transferId} Files: ${filesList.length} Will zip: ${willZip}`)
   // If there are more than one file, it should be zipped into the bundle
   // If there is only one file, the bundle IS that file already (to avoid zipping one file)
-  if (filesList.length > 1) {
+  if (willZip) {
     const totalSize = filesList.reduce((sum, file) => sum + (file.size || 0), 0)
     // console.log(
     //   "Adding to zipperQueue:",
@@ -222,7 +238,7 @@ app.route({
     if (!fileId || !/^[0-9a-fA-F]{24}$/.test(fileId)) {
       return reply.badRequest('Invalid fileId')
     }
-    
+
     const { tid, size, filesCount } = req.auth
     const url = await provider.signUpload(tid, filesCount, fileId)
     reply.send({ url })
@@ -313,12 +329,14 @@ app.get('/ping', () => ({ success: true }))
 
 // app.get("/robots.txt", () => )
 
-process.on('uncaughtException', () => {
+process.on('uncaughtException', e => {
+  logger.error(e)
 })
 
-process.on('unhandledRejection', () => {
+process.on('unhandledRejection', e => {
+  logger.error(e)
 })
 
 await provider.init()
-startWorker()
+startWorker(logger)
 await app.listen({ port: 3050, host: process.env.NODE_ENV === "development" ? '127.0.0.1' : '0.0.0.0' })

@@ -9,6 +9,7 @@ import { PassThrough } from "stream";
 import { finished, pipeline } from "stream/promises";
 import Bottleneck from "bottleneck";
 import { DiskCacheS3Store } from "../store/S3DiskCacheS3Store.js";
+import pino from "pino";
 
 export class S3Provider extends BaseProvider {
   constructor(config) {
@@ -115,7 +116,7 @@ export class S3Provider extends BaseProvider {
     return objects.map(object => ({ id: object.key, size: object.size }))
   }
 
-  async createZipBundle(transferId, filesList) {
+  async createZipBundle(transferId, filesList, logger) {
     const passThrough = new PassThrough()
 
     const uploader = new Upload({
@@ -126,7 +127,7 @@ export class S3Provider extends BaseProvider {
       leavePartsOnError: false
     })
 
-    this.prepareZipBundleArchive(transferId, filesList, passThrough)
+    this.prepareZipBundleArchive(transferId, filesList, passThrough, logger)
 
     await uploader.done()
 
@@ -144,19 +145,24 @@ export class S3Provider extends BaseProvider {
     return { url }
   }
 
-  async prepareZipBundleArchive(transferId, files, stream) {
+  /**
+   * 
+   * @param {*} transferId 
+   * @param {*} files 
+   * @param {*} stream 
+   * @param {pino.Logger} logger 
+   */
+  async prepareZipBundleArchive(transferId, files, stream, logger) {
     let aborted = false
     const archive = archiver('zip', { forceZip64: true, store: true })
-      .on('error', err => aborted ? console.warn('client aborted') : console.error(err))
-      .on("warning", warn => console.warn("Archiver warning:", warn))
+      .on('error', err => aborted ? logger.warn("archiver error: client aborted") : logger.error(err, "archiver error"))
+      .on("warning", warn => logger.warn(warn, "archiver warning"))
 
     pipeline(archive, stream)
     stream.once('close', () => { aborted = true })
 
     for (const f of files) {
-      console.log("getTransferFileKey:", f.name)
       const key = await this.getTransferFileKey(transferId, f.id);
-      console.log("getObject:", f.name)
 
       let Body;
       try {
@@ -164,17 +170,16 @@ export class S3Provider extends BaseProvider {
         Body = res.Body
       }
       catch (err) {
-        console.error("!FAILED TO GET OBJECT!:", key)
-        console.error(err)
+        logger.error(`Failed to get object: ${key}`)
+        logger.error(err)
         continue
       }
-      console.log("append:", f.name)
       archive.append(Body, { name: f.relativePath });
-      console.log("waiting:", f.name)
-
+      logger.debug(`Archiver now waiting for: ${f.relativePath}`)
       await finished(Body)
     }
     archive.finalize()
+    logger.debug(`Archiver finished!`)
   }
 
   async delete(transferId) {
