@@ -14,6 +14,7 @@ import {
   PutBucketCorsCommand
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { logger } from '../server.js';
 
 export async function signUpload({ client, bucket, key, type, maxAge = 3600 }) {
   return getSignedUrl(
@@ -180,13 +181,15 @@ export async function setAbortMultipartLifecycle(client, bucketName) {
 }
 
 export async function setBucketCors(client, bucketName) {
+  const corsOrigin = process.env.NODE_ENV == "development" ? 'http://localhost:3000' : process.env.BUCKET_CORS_ORIGIN
+  logger.info(`Setting bucket CORS: ${corsOrigin}`)
   return client.send(
     new PutBucketCorsCommand({
       Bucket: bucketName,
       CORSConfiguration: {
         CORSRules: [
           {
-            AllowedOrigins: [process.env.NODE_ENV == "development" ? 'http://localhost:3000' : process.env.BUCKET_CORS_ORIGIN],
+            AllowedOrigins: [corsOrigin],
             AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
             AllowedHeaders: ['*'],
             ExposeHeaders: ['ETag'],

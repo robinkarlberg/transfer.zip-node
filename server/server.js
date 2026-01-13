@@ -22,7 +22,7 @@ const PINO_CONF = {
   },
 }
 
-const logger = pino(PINO_CONF)
+export const logger = pino(PINO_CONF)
 
 const app = Fastify({
   logger: PINO_CONF,
