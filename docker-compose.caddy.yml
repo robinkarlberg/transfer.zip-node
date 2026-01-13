@@ -5,6 +5,7 @@ services:
       - ./keys:/keys
     ports: []
     env_file:
+      - .env
       - server/.env
 
   caddy:
