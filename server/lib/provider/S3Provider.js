@@ -153,6 +153,7 @@ export class S3Provider extends BaseProvider {
    * @param {pino.Logger} logger
    */
   async prepareZipBundleArchive(transferId, files, stream, logger = console) {
+    logger.info(`Archiver starting...`)
     let aborted = false
     const archive = archiver('zip', { forceZip64: true, store: true })
       .on('error', err => aborted ? logger.warn("archiver error: client aborted") : logger.error(err, "archiver error"))
@@ -181,7 +182,7 @@ export class S3Provider extends BaseProvider {
       await finished(Body)
     }
     archive.finalize()
-    logger.debug(`Archiver finished!`)
+    logger.info(`Archiver finished!`)
   }
 
   async delete(transferId) {
