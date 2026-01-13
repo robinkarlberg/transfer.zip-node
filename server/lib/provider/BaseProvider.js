@@ -60,7 +60,7 @@ export class BaseProvider {
     throw new Error("must be implemented in subclass");
   }
 
-  async prepareZipBundleArchive(transferId, filesList) {
+  async prepareZipBundleArchive(transferId, filesList, logger) {
     throw new Error("must be implemented in subclass");
   }
 

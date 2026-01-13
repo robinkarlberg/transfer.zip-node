@@ -154,7 +154,7 @@ const handleDownload = async (req, reply) => {
 
     const passThrough = new PassThrough()
     reply.send(passThrough)
-    await chosenProvider.prepareZipBundleArchive(tid, filesList, passThrough)
+    await chosenProvider.prepareZipBundleArchive(tid, filesList, passThrough, logger.child({ action: "ondemand-zipper", transferId: tid }))
   }
 }
 

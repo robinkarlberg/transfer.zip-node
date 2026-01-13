@@ -146,13 +146,13 @@ export class S3Provider extends BaseProvider {
   }
 
   /**
-   * 
-   * @param {*} transferId 
-   * @param {*} files 
-   * @param {*} stream 
-   * @param {pino.Logger} logger 
+   *
+   * @param {*} transferId
+   * @param {*} files
+   * @param {*} stream
+   * @param {pino.Logger} logger
    */
-  async prepareZipBundleArchive(transferId, files, stream, logger) {
+  async prepareZipBundleArchive(transferId, files, stream, logger = console) {
     let aborted = false
     const archive = archiver('zip', { forceZip64: true, store: true })
       .on('error', err => aborted ? logger.warn("archiver error: client aborted") : logger.error(err, "archiver error"))
