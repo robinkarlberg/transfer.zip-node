@@ -174,6 +174,7 @@ export class S3Provider extends BaseProvider {
         logger.error(err)
         continue
       }
+      // TODO: check if "f.relativePath || f.name" fucks anything up
       const fileFullName = f.relativePath || f.name
       archive.append(Body, { name: fileFullName });
       logger.debug(`Archiver now waiting for: ${fileFullName}`)
