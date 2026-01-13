@@ -117,6 +117,7 @@ export class S3Provider extends BaseProvider {
   }
 
   async createZipBundle(transferId, filesList, logger) {
+    logger.info(`Creating zip bundle...`)
     const passThrough = new PassThrough()
 
     const uploader = new Upload({
@@ -131,6 +132,7 @@ export class S3Provider extends BaseProvider {
 
     await uploader.done()
 
+    logger.info(`Zip bundle finished!`)
     return { ok: true }
   }
 
