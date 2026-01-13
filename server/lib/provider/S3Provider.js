@@ -116,7 +116,7 @@ export class S3Provider extends BaseProvider {
     return objects.map(object => ({ id: object.key, size: object.size }))
   }
 
-  async createZipBundle(transferId, filesList, logger) {
+  async createZipBundle(transferId, filesList, logger = console) {
     logger.info(`Creating zip bundle...`)
     const passThrough = new PassThrough()
 
