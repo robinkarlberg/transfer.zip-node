@@ -181,15 +181,21 @@ export async function setAbortMultipartLifecycle(client, bucketName) {
 }
 
 export async function setBucketCors(client, bucketName) {
-  const corsOrigin = process.env.NODE_ENV == "development" ? 'http://localhost:3000' : process.env.BUCKET_CORS_ORIGIN
-  logger.info(`Setting bucket CORS: ${corsOrigin}`)
+  let corsOrigins
+  if(process.env.NODE_ENV != "development") {
+    corsOrigins = ["http://localhost:3000"]
+  }
+  else {
+    corsOrigins = process.env.BUCKET_CORS_ORIGINS.split(",")
+  }
+  logger.info(`Setting bucket CORS: ${corsOrigins}`)
   return client.send(
     new PutBucketCorsCommand({
       Bucket: bucketName,
       CORSConfiguration: {
         CORSRules: [
           {
-            AllowedOrigins: [corsOrigin],
+            AllowedOrigins: corsOrigins,
             AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE', 'HEAD'],
             AllowedHeaders: ['*'],
             ExposeHeaders: ['ETag'],
