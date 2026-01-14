@@ -182,7 +182,7 @@ export async function setAbortMultipartLifecycle(client, bucketName) {
 
 export async function setBucketCors(client, bucketName) {
   let corsOrigins
-  if(process.env.NODE_ENV != "development") {
+  if(process.env.NODE_ENV == "development") {
     corsOrigins = ["http://localhost:3000"]
   }
   else {
