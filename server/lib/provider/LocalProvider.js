@@ -76,14 +76,15 @@ export class LocalProvider extends BaseProvider {
 
     const writeStream = fileStream.createWriteStream()
 
-    await this.prepareZipBundleArchive(transferId, filesList, writeStream)
-
-    await new Promise((resolve, reject) => {
-      writeStream.on('close', resolve)
-      writeStream.on('error', reject)
-    })
-
-    await fileStream.close()
+    try {
+      await this.prepareZipBundleArchive(transferId, filesList, writeStream)
+      await finished(writeStream)
+    } catch (err) {
+      writeStream.destroy(err)
+      throw err
+    } finally {
+      await fileStream.close().catch(() => { })
+    }
     return { ok: true }
   }
 
@@ -100,19 +101,31 @@ export class LocalProvider extends BaseProvider {
       .on('error', () => { })
       .on("warning", () => { })
 
-    pipeline(archive, stream)
+    const archiveDone = pipeline(archive, stream)
+    let pipelineErr = null
+    archiveDone.catch(err => { pipelineErr = err })
 
-    for (const f of files) {
-      const filePath = this.translateDatastoreKeyPath(await this.getTransferFileKey(transferId, f.id))
+    let current = null
+    try {
+      for (const f of files) {
+        if (pipelineErr) throw pipelineErr
 
-      const readStream = _fs.createReadStream(filePath)
-      try {
+        const filePath = this.translateDatastoreKeyPath(await this.getTransferFileKey(transferId, f.id))
+
+        const readStream = _fs.createReadStream(filePath)
+        current = readStream
         archive.append(readStream, { name: f.relativePath })
-      } finally {
-        await finished(readStream)
+        await Promise.race([finished(readStream), archiveDone])
+        current = null
       }
+      await Promise.race([archive.finalize(), archiveDone])
+      await archiveDone
+    } catch (err) {
+      // destroy the in-flight file stream so its fd is released
+      current?.destroy(err)
+      archive.destroy()
+      throw err
     }
-    archive.finalize()
   }
 
   async delete(transferId) {

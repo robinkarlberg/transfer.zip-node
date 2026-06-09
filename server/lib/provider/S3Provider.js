@@ -1,5 +1,5 @@
 import archiver from "archiver"
-import { completeMultipart, createMultipart, deleteKeyRecurse, getObject, headBucket, listAllObjects, listBuckets, setAbortMultipartLifecycle, setBucketCors, signDownload, signPart, signUpload } from "../s3.js";
+import { abortMultipart as s3AbortMultipart, completeMultipart, createMultipart, deleteKeyRecurse, getObject, headBucket, listAllObjects, listBuckets, setAbortMultipartLifecycle, setBucketCors, signDownload, signPart, signUpload } from "../s3.js";
 import { BaseProvider } from "./BaseProvider.js";
 import { Upload } from "@aws-sdk/lib-storage";
 import { conf } from "../config.js";
@@ -14,7 +14,18 @@ import pino from "pino";
 export class S3Provider extends BaseProvider {
   constructor(config) {
     super(config)
-    this.client = new S3Client(this.config.s3)
+    this.client = new S3Client({
+      ...this.config.s3,
+      // Backstop against socket leaks: requestTimeout is a socket
+      // *inactivity* timeout, so it reaps stalled/leaked streams without
+      // affecting slow-but-moving transfers.
+      requestHandler: {
+        connectionTimeout: 5_000,
+        requestTimeout: 300_000,
+        httpsAgent: { keepAlive: true, maxSockets: 200 },
+        httpAgent: { keepAlive: true, maxSockets: 200 },
+      },
+    })
     // this.datastore = new DiskCacheS3Store({
     //   s3ClientConfig: {
     //     endpoint: this.config.s3.endpoint,
@@ -76,7 +87,7 @@ export class S3Provider extends BaseProvider {
 
   async abortMultipart(transferId, filesCount, fileId, uploadId) {
     const key = filesCount == 1 ? this.getBundleKey(transferId) : await this.getTransferFileKey(transferId, fileId)
-    return completeMultipart({
+    return s3AbortMultipart({
       client: this.client,
       bucket: this.config.bucket,
       key,
@@ -128,9 +139,18 @@ export class S3Provider extends BaseProvider {
       leavePartsOnError: false
     })
 
-    this.prepareZipBundleArchive(transferId, filesList, passThrough, logger)
+    const zipping = this.prepareZipBundleArchive(transferId, filesList, passThrough, logger)
+    const uploading = uploader.done()
 
-    await uploader.done()
+    try {
+      await Promise.all([zipping, uploading])
+    } catch (err) {
+      // Kill whichever side is still alive and wait for both to wind down,
+      // so the BullMQ retry starts with nothing left running.
+      passThrough.destroy(err)
+      await Promise.allSettled([zipping, uploading])
+      throw err
+    }
 
     logger.info(`Zip bundle finished!`)
     return { ok: true }
@@ -156,35 +176,51 @@ export class S3Provider extends BaseProvider {
    */
   async prepareZipBundleArchive(transferId, files, stream, logger = console) {
     logger.info(`Archiver starting...`)
-    let aborted = false
     const archive = archiver('zip', { forceZip64: true, store: true })
-      .on('error', err => aborted ? logger.warn("archiver error: client aborted") : logger.error(err, "archiver error"))
+      // listener must stay attached: archiver can emit 'error' after the
+      // pipeline has settled (e.g. append after abort)
+      .on('error', err => logger.warn(`archiver error: ${err.message}`))
       .on("warning", warn => logger.warn(warn, "archiver warning"))
 
-    pipeline(archive, stream)
-    stream.once('close', () => { aborted = true })
+    const archiveDone = pipeline(archive, stream)
+    let pipelineErr = null
+    archiveDone.catch(err => { pipelineErr = err })
 
-    for (const f of files) {
-      const key = await this.getTransferFileKey(transferId, f.id);
+    let current = null
+    try {
+      for (const f of files) {
+        if (pipelineErr) throw pipelineErr
 
-      let Body;
-      try {
-        const res = await getObject(this.client, this.config.bucket, key);
-        Body = res.Body
+        const key = await this.getTransferFileKey(transferId, f.id);
+
+        let Body;
+        try {
+          ({ Body } = await getObject(this.client, this.config.bucket, key));
+        }
+        catch (err) {
+          logger.error(`Failed to get object: ${key}`)
+          logger.error(err)
+          continue
+        }
+        current = Body
+        // TODO: check if "f.relativePath || f.name" fucks anything up
+        const fileFullName = f.relativePath || f.name
+        archive.append(Body, { name: fileFullName });
+        logger.debug(`Archiver now waiting for: ${fileFullName}`)
+        // settles when the entry is fully read, or as soon as the
+        // archive/destination dies — whichever comes first
+        await Promise.race([finished(Body), archiveDone])
+        current = null
       }
-      catch (err) {
-        logger.error(`Failed to get object: ${key}`)
-        logger.error(err)
-        continue
-      }
-      // TODO: check if "f.relativePath || f.name" fucks anything up
-      const fileFullName = f.relativePath || f.name
-      archive.append(Body, { name: fileFullName });
-      logger.debug(`Archiver now waiting for: ${fileFullName}`)
-      await finished(Body)
+      await Promise.race([archive.finalize(), archiveDone])
+      await archiveDone
+      logger.info(`Archiver finished!`)
+    } catch (err) {
+      // destroy the in-flight S3 stream so its socket is released
+      current?.destroy(err)
+      archive.destroy()
+      throw err
     }
-    archive.finalize()
-    logger.info(`Archiver finished!`)
   }
 
   async delete(transferId) {

@@ -152,9 +152,21 @@ const handleDownload = async (req, reply) => {
     reply.header('Content-Type', "application/zip")
     reply.header('Content-Disposition', `attachment; filename="${name}"`)
 
+    const log = logger.child({ action: "ondemand-zipper", transferId: tid })
     const passThrough = new PassThrough()
     reply.send(passThrough)
-    await chosenProvider.prepareZipBundleArchive(tid, filesList, passThrough, logger.child({ action: "ondemand-zipper", transferId: tid }))
+    try {
+      await chosenProvider.prepareZipBundleArchive(tid, filesList, passThrough, log)
+    } catch (err) {
+      if (err?.code === 'ERR_STREAM_PREMATURE_CLOSE') {
+        log.warn("download aborted by client")
+      } else {
+        log.error(err, "on-demand zip failed")
+      }
+      // headers are already sent — terminate the response so the client
+      // doesn't hang forever (requestTimeout is 0)
+      passThrough.destroy(err)
+    }
   }
 }
 
@@ -223,9 +235,7 @@ const handleControlUploadComplete = async (req) => {
 app.register(async function (app) {
   await app.register(fastifyFormbody)
 
-  app.post('/download', { preHandler: needsScope('download', true) }, (req, reply) => {
-    handleDownload(req, reply)
-  })
+  app.post('/download', { preHandler: needsScope('download', true) }, handleDownload)
 })
 
 app.route({
