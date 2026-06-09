@@ -22,8 +22,8 @@ export class S3Provider extends BaseProvider {
       requestHandler: {
         connectionTimeout: 5_000,
         requestTimeout: 300_000,
-        httpsAgent: { keepAlive: true, maxSockets: 200 },
-        httpAgent: { keepAlive: true, maxSockets: 200 },
+        httpsAgent: { keepAlive: true, maxSockets: 1000 },
+        httpAgent: { keepAlive: true, maxSockets: 1000 },
       },
     })
     // this.datastore = new DiskCacheS3Store({
