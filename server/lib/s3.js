@@ -67,11 +67,13 @@ export async function abortMultipart({ client, bucket, key, uploadId }) {
 }
 
 export async function signDownload({ client, bucket, key, fileName, maxAge = 600 }) {
+  // strip characters that would break out of the quoted header value
+  const safeName = fileName?.replace(/[\r\n"]/g, "_")
   return getSignedUrl(
     client,
     new GetObjectCommand({
       Bucket: bucket, Key: key,
-      ResponseContentDisposition: fileName ? `attachment; filename="${fileName}"` : undefined
+      ResponseContentDisposition: safeName ? `attachment; filename="${safeName}"` : undefined
     }),
     { expiresIn: maxAge },
   );
@@ -109,6 +111,18 @@ export async function listAllObjects(client, bucket, prefix) {
 export async function getObject(client, bucket, key) {
   return client.send(
     new GetObjectCommand({ Bucket: bucket, Key: key })
+  )
+}
+
+export async function putObject(client, bucket, key, body, { contentType, cacheControl } = {}) {
+  return client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+      CacheControl: cacheControl
+    })
   )
 }
 

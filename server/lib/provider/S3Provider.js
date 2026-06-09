@@ -1,5 +1,6 @@
 import archiver from "archiver"
-import { abortMultipart as s3AbortMultipart, completeMultipart, createMultipart, deleteKeyRecurse, getObject, headBucket, listAllObjects, listBuckets, setAbortMultipartLifecycle, setBucketCors, signDownload, signPart, signUpload } from "../s3.js";
+import { abortMultipart as s3AbortMultipart, completeMultipart, createMultipart, deleteKeyRecurse, getObject, headBucket, listAllObjects, listBuckets, putObject, setAbortMultipartLifecycle, setBucketCors, signDownload, signPart, signUpload } from "../s3.js";
+import { isPreviewableFile, ORIGINAL_URL_MAX_AGE, PREVIEW_CACHE_CONTROL, PREVIEW_URL_MAX_AGE } from "../previews.js";
 import { BaseProvider } from "./BaseProvider.js";
 import { Upload } from "@aws-sdk/lib-storage";
 import { conf } from "../config.js";
@@ -221,6 +222,103 @@ export class S3Provider extends BaseProvider {
       archive.destroy()
       throw err
     }
+  }
+
+  supportsPreviews() {
+    return true
+  }
+
+  async createPreviews(transferId, filesList, logger = console) {
+    // sharp is loaded lazily so a missing/broken native install can't take
+    // down server boot — preview jobs fail and retry instead
+    const { generateImageVariants } = await import("../previewGenerator.js")
+
+    const filesCount = filesList.length
+    const generated = {}
+
+    for (const f of filesList) {
+      if (!isPreviewableFile(f)) continue
+
+      const sourceKey = filesCount == 1 ? this.getBundleKey(transferId) : this.getTransferFileKey(transferId, f.id)
+      try {
+        const res = await getObject(this.client, this.config.bucket, sourceKey)
+        const source = Buffer.from(await res.Body.transformToByteArray())
+        const { thumb, preview } = await generateImageVariants(source)
+
+        await putObject(this.client, this.config.bucket, this.getThumbKey(transferId, f.id), thumb, {
+          contentType: "image/webp",
+          cacheControl: PREVIEW_CACHE_CONTROL
+        })
+        await putObject(this.client, this.config.bucket, this.getPreviewKey(transferId, f.id), preview, {
+          contentType: "image/webp",
+          cacheControl: PREVIEW_CACHE_CONTROL
+        })
+        generated[f.id] = { thumb: true, preview: true }
+      } catch (err) {
+        // an undecodable image shouldn't fail the whole job — that file
+        // simply won't get previews
+        logger.warn(`Preview generation failed for file ${f.id}: ${err.message}`)
+      }
+    }
+
+    await putObject(this.client, this.config.bucket, this.getPreviewsManifestKey(transferId), JSON.stringify({ v: 1, files: generated }), {
+      contentType: "application/json"
+    })
+
+    logger.info(`Previews finished: ${Object.keys(generated).length}/${filesList.length} files`)
+    return { ok: true }
+  }
+
+  async getPreviewsManifest(transferId) {
+    try {
+      const res = await getObject(this.client, this.config.bucket, this.getPreviewsManifestKey(transferId))
+      return JSON.parse(await res.Body.transformToString())
+    } catch (err) {
+      if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+        return null
+      }
+      throw err
+    }
+  }
+
+  async signFileDownloads(transferId, filesCount, files) {
+    // null manifest = previews not generated (yet) — sign originals only
+    const manifest = await this.getPreviewsManifest(transferId)
+
+    const out = {}
+    for (const f of files) {
+      const originalKey = filesCount == 1 ? this.getBundleKey(transferId) : this.getTransferFileKey(transferId, f.id)
+      const entry = {
+        original: await signDownload({
+          client: this.client,
+          bucket: this.config.bucket,
+          key: originalKey,
+          fileName: f.name,
+          maxAge: ORIGINAL_URL_MAX_AGE
+        })
+      }
+
+      const variants = manifest?.files?.[f.id]
+      if (variants?.thumb) {
+        entry.thumb = await signDownload({
+          client: this.client,
+          bucket: this.config.bucket,
+          key: this.getThumbKey(transferId, f.id),
+          maxAge: PREVIEW_URL_MAX_AGE
+        })
+      }
+      if (variants?.preview) {
+        entry.preview = await signDownload({
+          client: this.client,
+          bucket: this.config.bucket,
+          key: this.getPreviewKey(transferId, f.id),
+          maxAge: PREVIEW_URL_MAX_AGE
+        })
+      }
+
+      out[f.id] = entry
+    }
+    return out
   }
 
   async delete(transferId) {

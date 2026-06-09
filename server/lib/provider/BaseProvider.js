@@ -32,18 +32,48 @@ export class BaseProvider {
     return `${this.getTransferBaseKey(transferId)}/bundle`
   }
 
-  async getTransferFilesBaseKey(transferId) {
-    if (await this.hasBundle()) {
-      throw new Error("No files base key exists if bundle is finished.")
-    }
+  getTransferFilesBaseKey(transferId) {
     return `${this.getTransferBaseKey(transferId)}/files`
   }
 
-  async getTransferFileKey(transferId, fileId) {
-    if (await this.hasBundle()) {
-      throw new Error("No files base key exists if bundle is finished.")
-    }
+  // Per-file objects stay in the bucket after the bundle is zipped —
+  // previews and per-file downloads rely on that.
+  getTransferFileKey(transferId, fileId) {
     return `${this.getTransferBaseKey(transferId)}/files/${fileId}`
+  }
+
+  getPreviewsBaseKey(transferId) {
+    return `${this.getTransferBaseKey(transferId)}/previews`
+  }
+
+  // fileIds are 24-hex, so these names can't collide with each other
+  getThumbKey(transferId, fileId) {
+    return `${this.getPreviewsBaseKey(transferId)}/thumb-${fileId}`
+  }
+
+  getPreviewKey(transferId, fileId) {
+    return `${this.getPreviewsBaseKey(transferId)}/preview-${fileId}`
+  }
+
+  getPreviewsManifestKey(transferId) {
+    return `${this.getPreviewsBaseKey(transferId)}/manifest`
+  }
+
+  // Per-file presigned URLs + thumbnails. Off unless the subclass can presign.
+  supportsPreviews() {
+    return false
+  }
+
+  async createPreviews(transferId, filesList, logger) {
+    throw new Error("must be implemented in subclass");
+  }
+
+  async getPreviewsManifest(transferId) {
+    throw new Error("must be implemented in subclass");
+  }
+
+  async signFileDownloads(transferId, filesCount, files) {
+    throw new Error("must be implemented in subclass");
   }
 
   async listFiles(transferId) {

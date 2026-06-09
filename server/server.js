@@ -10,6 +10,9 @@ import { randomHttpErrorInDev } from './lib/dev/randomError.js'
 import { legacyProvider, provider } from './lib/provider/provider.js'
 import zipperQueue from './lib/queue/zipperQueue.js'
 import startWorker from './lib/queue/zipperWorker.js'
+import previewsQueue from './lib/queue/previewsQueue.js'
+import startPreviewsWorker from './lib/queue/previewsWorker.js'
+import { isPreviewableFile } from './lib/previews.js'
 import { existsSync } from 'node:fs'
 import pino from 'pino'
 
@@ -229,6 +232,21 @@ const handleControlUploadComplete = async (req) => {
     })
   }
 
+  if (provider.supportsPreviews()) {
+    const previewableCount = filesList.filter(isPreviewableFile).length
+    if (previewableCount > 0) {
+      req.log.info(`Enqueueing previews: ${transferId} (${previewableCount} images)`)
+      await previewsQueue.add(`${transferId}-previews`, { filesList }, {
+        jobId: transferId,
+        attempts: 5,
+        backoff: {
+          type: "exponential",
+          delay: 2000
+        }
+      })
+    }
+  }
+
   return { success: true }
 }
 
@@ -323,6 +341,28 @@ app.route({
   }
 })
 
+// Per-file presigned URLs for the download page: `original` for any file,
+// plus `thumb`/`preview` once the previews job has generated them.
+app.post('/files/sign', { preHandler: needsScope('download') }, async (req, reply) => {
+  const files = req.body?.files
+  if (!Array.isArray(files) || files.length === 0 || files.length > 100) {
+    return reply.badRequest('files must be an array of 1-100 entries')
+  }
+  for (const f of files) {
+    if (!f || typeof f.id !== 'string' || !/^[0-9a-fA-F]{24}$/.test(f.id) || (f.name != null && typeof f.name !== 'string')) {
+      return reply.badRequest('Invalid file entry')
+    }
+  }
+
+  const { tid, filesCount, backendVersion } = req.auth
+  if (backendVersion != 2 || !provider.supportsPreviews()) {
+    return { success: true, files: {} }
+  }
+
+  const signed = await provider.signFileDownloads(tid, filesCount, files)
+  return { success: true, files: signed }
+})
+
 app.post('/control/transferStatus', { preHandler: needsScope('control') }, async (req, reply) => {
   return await handleControlTransferStatus(req, reply)
 })
@@ -349,4 +389,5 @@ process.on('unhandledRejection', e => {
 
 await provider.init()
 startWorker(logger)
+startPreviewsWorker(logger)
 await app.listen({ port: 3050, host: process.env.NODE_ENV === "development" ? '127.0.0.1' : '0.0.0.0' })
